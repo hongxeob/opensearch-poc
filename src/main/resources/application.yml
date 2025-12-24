@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: product-search-service
+
+  # PostgreSQL 설정 (읽기 전용)
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/zelda_product
+    username: postgres
+    password: postgres
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA 설정
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none  # validate → none (DB 없어도 실행)
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: false
+    open-in-view: false
+
+  # Kafka 설정 (자동 시작 비활성화)
+  kafka:
+    bootstrap-servers: localhost:9092
+  
+  # Kafka 자동 설정 비활성화
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+  # Redis 설정 (자동 시작 비활성화)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms
+
+# OpenSearch 설정
+opensearch:
+  address: https://opensearch-cluster.dev.nugu.jp
+  hosts: localhost:9200
+  username: admin
+  password: admin
+  connection-timeout: 5000
+  socket-timeout: 60000
+  indices:
+    products: zelda-products
+    sellers: zelda-sellers
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.mediquitous: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.opensearch: DEBUG
+
+# SpringDoc OpenAPI 설정
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    disable-swagger-default-url: true
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+
+# 서버 설정
+server:
+  port: 8081
+  compression:
+    enabled: true
+  http2:
+    enabled: true
+
+# 애플리케이션 설정
+app:
+  cursor:
+    default-size: 20
+    max-size: 100
+  cache:
+    ttl:
+      product: 300  # 5분
+      category: 3600  # 1시간
+  batch:
+    flush-interval: 5000  # 5초
+    flush-size: 100
