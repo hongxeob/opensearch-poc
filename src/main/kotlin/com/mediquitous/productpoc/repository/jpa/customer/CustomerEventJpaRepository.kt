@@ -7,9 +7,18 @@ import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 
 /**
+ * 최근 조회 상품 Projection
+ */
+interface RecentlyViewedProductProjection {
+    val productId: Long
+}
+
+/**
  * 고객 이벤트 JPA Repository
  *
  * Go 서비스의 최근 조회 이력 관련 쿼리와 동일한 스펙 구현
+ * - GetRecentlyViewedSellerIDsByCustomerID
+ * - GetRecentlyViewedProductIDsByCustomerID
  */
 @Repository
 interface CustomerEventJpaRepository : JpaRepository<CustomerEventEntity, Long> {
@@ -86,18 +95,13 @@ interface CustomerEventJpaRepository : JpaRepository<CustomerEventEntity, Long> 
      * ORDER BY sub.last_viewed DESC;
      * ```
      *
-     * 조회 조건:
-     * - view_item 액션 이벤트만 조회
-     * - 판매 중이고, 노출되고, 이미지가 있고, 삭제되지 않은 상품만
-     * - 최근 조회 순으로 정렬
-     *
      * @param customerId 고객 ID
      * @param limitCount 조회할 최대 개수
-     * @return 최근 조회한 상품 ID와 조회 시각 목록
+     * @return 최근 조회한 상품 ID 목록 (최근 순)
      */
     @Query(
         value = """
-        SELECT p.id, sub.last_viewed
+        SELECT p.id AS productId
         FROM shopping_product p
         JOIN (
             SELECT ce.product_id, MAX(ce.created) as last_viewed
@@ -119,5 +123,5 @@ interface CustomerEventJpaRepository : JpaRepository<CustomerEventEntity, Long> 
     fun findRecentlyViewedProductIdsByCustomerId(
         @Param("customerId") customerId: Long,
         @Param("limitCount") limitCount: Int = 20,
-    ): List<Array<Any>>
+    ): List<RecentlyViewedProductProjection>
 }

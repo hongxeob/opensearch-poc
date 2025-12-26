@@ -269,7 +269,7 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 - [x] Kafka 이벤트 버퍼 구현
 - [ ] CDC 이벤트 구현
 - [x] 베스트 랭킹 DB 연동 (PostgreSQL 랭킹 스펙 조회)
-- [ ] 좋아요/최근 본 상품 DB 연동
+- [x] 좋아요/최근 본 상품 DB 연동
 - [ ] 테스트 코드 작성 (Kotest)
 - [ ] Docker Compose 설정
 - [ ] CI/CD 파이프라인 구축

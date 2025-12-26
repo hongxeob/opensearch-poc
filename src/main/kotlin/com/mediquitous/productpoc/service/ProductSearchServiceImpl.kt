@@ -5,6 +5,7 @@ import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.model.vo.BestRankingPath
 import com.mediquitous.productpoc.model.vo.LikedProduct
 import com.mediquitous.productpoc.model.vo.RankedProduct
+import com.mediquitous.productpoc.repository.jpa.customer.CustomerEventJpaRepository
 import com.mediquitous.productpoc.repository.jpa.customer.LikeJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.ProductRankingJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.RankingSpecificationJpaRepository
@@ -31,6 +32,7 @@ class ProductSearchServiceImpl(
     private val rankingSpecificationJpaRepository: RankingSpecificationJpaRepository,
     private val productRankingJpaRepository: ProductRankingJpaRepository,
     private val likeJpaRepository: LikeJpaRepository,
+    private val customerEventJpaRepository: CustomerEventJpaRepository,
 ) : ProductSearchService {
     // =====================================================
     // 단건 조회
@@ -440,10 +442,29 @@ class ProductSearchServiceImpl(
     ): CursorPaginationResponse<SimpleProductDto> {
         logger.info { "최근 본 상품 검색: customerId=$customerId, size=$size" }
 
-        // TODO: PostgreSQL에서 최근 본 상품 ID 조회 후 OpenSearch 검색
-        // 현재는 DB 연동이 필요
-        logger.warn { "최근 본 상품 검색은 DB 연동이 필요합니다" }
-        return CursorPaginationResponse.empty()
+        // 1. 최근 본 상품 ID 목록 조회
+        val recentlyViewedProductIds =
+            customerEventJpaRepository
+                .findRecentlyViewedProductIdsByCustomerId(customerId, size)
+                .map { it.productId }
+
+        if (recentlyViewedProductIds.isEmpty()) {
+            logger.debug { "최근 본 상품이 없습니다: customerId=$customerId" }
+            return CursorPaginationResponse.empty()
+        }
+
+        // 2. OpenSearch에서 상품 정보 조회
+        val searchResult = openSearchRepository.searchByProductIdsBulk(recentlyViewedProductIds)
+
+        // 3. 원본 조회 순서 복원 (최근 본 순)
+        val orderedProducts = restoreOriginalRankingOrder(recentlyViewedProductIds, searchResult.products)
+
+        return CursorPaginationResponse(
+            count = orderedProducts.size.toLong(),
+            results = orderedProducts,
+            nextCursor = null,
+            previousCursor = null,
+        )
     }
 
     // =====================================================
