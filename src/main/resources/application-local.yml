@@ -10,9 +10,6 @@ redis:
 kafka:
   enabled: false
 
-opensearch:
-  hosts: localhost:9200
-
 logging:
   level:
     com.mediquitous: DEBUG

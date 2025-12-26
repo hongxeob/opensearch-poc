@@ -102,7 +102,7 @@ kafka:
 # OpenSearch 설정
 # =====================================================
 opensearch:
-  address: ${OPENSEARCH_ADDRESS:http://localhost:9200}
+  address: ${OPENSEARCH_ADDRESS:https://opensearch-cluster.dev.nugu.jp}
   username: ${OPENSEARCH_USER:}
   password: ${OPENSEARCH_PASSWORD:}
   connection-timeout: 5000

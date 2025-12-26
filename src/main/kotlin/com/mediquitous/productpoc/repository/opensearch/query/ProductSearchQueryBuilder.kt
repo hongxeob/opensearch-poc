@@ -861,7 +861,7 @@ object ProductSearchQueryBuilder {
                                         .query { sq ->
                                             sq.term { t ->
                                                 t
-                                                    .field("seller.type.keyword")
+                                                    .field("seller.type")
                                                     .value(FieldValue.of(sellerType))
                                             }
                                         }
@@ -869,7 +869,7 @@ object ProductSearchQueryBuilder {
                             }
                         }
 
-                        // 4. category filter
+                        // categorySlug 필터
                         if (!categorySlug.isNullOrBlank()) {
                             b.filter { f ->
                                 f.nested { n ->
