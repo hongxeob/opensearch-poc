@@ -116,24 +116,24 @@ src/main/kotlin/com/mediquitous/productpoc/
 
 ### ProductSearchService - 지원 검색 유형
 
-| 메서드 | 설명 | Go 원본 |
-|--------|------|---------|
-| `getProductById()` | 상품 단건 조회 | `by_id_service.go` |
-| `getProductsByIds()` | ID 목록 조회 | `by_ids_service.go` |
-| `getProductsByDisplayGroup()` | 기획전별 상품 | `by_display_group_id_service.go` |
-| `getProductsBySeller()` | 셀러별 상품 | `by_seller_slug_service.go` |
-| `getProductsByCategory()` | 카테고리별 상품 | `by_category_slug_service.go` |
-| `getProductsByCategoryAndSeller()` | 카테고리+셀러 | `by_category_slug_seller_slug_service.go` |
-| `searchByKeyword()` | 키워드 검색 | `by_keyword_search_service.go` |
-| `searchByKeywordWithFilters()` | 키워드+필터 검색 | `by_keyword_search_with_seller_type_category_service.go` |
-| `getProductsByHomeTab()` | 홈탭별 상품 | `by_home_tab_type_service.go` |
-| `getNewestProducts()` | 신상품 | `by_newest_service.go` |
-| `getRecommendProducts()` | 추천 상품 | `recommend_by_codes_service.go` |
-| `getProductsByCategoryId()` | 카테고리 ID별 | `by_category_id_service.go` |
-| `getProductsByRetailStore()` | 리테일 스토어별 | `by_retail_store_name_service.go` |
-| `getProductsByBestRanking()` | 베스트 랭킹 | `by_best_ranking_service.go` (DB 연동 필요) |
-| `getLikedProducts()` | 좋아요 상품 | `by_customer_id_liked_service.go` (DB 연동 필요) |
-| `getRecentlyViewedProducts()` | 최근 본 상품 | `by_customer_id_recently_viewed_service.go` (DB 연동 필요) |
+| 메서드 | 설명            | Go 원본 |
+|--------|---------------|---------|
+| `getProductById()` | 상품 단건 조회      | `by_id_service.go` |
+| `getProductsByIds()` | ID 목록 조회      | `by_ids_service.go` |
+| `getProductsByDisplayGroup()` | 기획전별 상품       | `by_display_group_id_service.go` |
+| `getProductsBySeller()` | 셀러별 상품        | `by_seller_slug_service.go` |
+| `getProductsByCategory()` | 카테고리별 상품      | `by_category_slug_service.go` |
+| `getProductsByCategoryAndSeller()` | 카테고리+셀러       | `by_category_slug_seller_slug_service.go` |
+| `searchByKeyword()` | 키워드 검색        | `by_keyword_search_service.go` |
+| `searchByKeywordWithFilters()` | 키워드+필터 검색     | `by_keyword_search_with_seller_type_category_service.go` |
+| `getProductsByHomeTab()` | 홈탭별 상품        | `by_home_tab_type_service.go` |
+| `getNewestProducts()` | 신상품           | `by_newest_service.go` |
+| `getRecommendProducts()` | 추천 상품         | `recommend_by_codes_service.go` |
+| `getProductsByCategoryId()` | 카테고리 ID별      | `by_category_id_service.go` |
+| `getProductsByRetailStore()` | 리테일 스토어별      | `by_retail_store_name_service.go` |
+| `getProductsByBestRanking()` | 베스트 랭킹        | `by_best_ranking_service.go` (DB 연동 필요) |
+| `getLikedProducts()` | 좋아요 상품        | `by_customer_id_liked_service.go` (DB 연동 필요) |
+| `getRecentlyViewedProducts()` | 최근 본 상품       | `by_customer_id_recently_viewed_service.go` (DB 연동 필요) |
 
 ### ProductSearchQueryBuilder - 쿼리 빌더
 
