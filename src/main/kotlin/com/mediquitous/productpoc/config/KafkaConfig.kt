@@ -1,6 +1,5 @@
 package com.mediquitous.productpoc.config
 
-import com.mediquitous.productpoc.service.event.ProductUpdatedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -19,7 +18,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.core.ProducerFactory
-import org.springframework.kafka.support.serializer.JsonDeserializer
+import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.support.serializer.JsonSerializer
 import java.time.Duration
 
@@ -28,6 +27,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * Kafka 설정 프로퍼티
  *
+ * Go 서버의 kafka/config.go 구조와 동일
  */
 @ConfigurationProperties(prefix = "kafka")
 data class KafkaProperties(
@@ -93,7 +93,7 @@ class KafkaConfig(
     // =====================================================
 
     @Bean
-    fun producerFactory(): ProducerFactory<String, ProductUpdatedEvent> {
+    fun producerFactory(): ProducerFactory<String, Any> {
         val configProps = buildCommonConfig().toMutableMap()
 
         configProps.apply {
@@ -118,8 +118,7 @@ class KafkaConfig(
     }
 
     @Bean
-    fun kafkaTemplate(producerFactory: ProducerFactory<String, ProductUpdatedEvent>): KafkaTemplate<String, ProductUpdatedEvent> =
-        KafkaTemplate(producerFactory)
+    fun kafkaTemplate(producerFactory: ProducerFactory<String, Any>): KafkaTemplate<String, Any> = KafkaTemplate(producerFactory)
 
     // =====================================================
     // Consumer Configuration
@@ -166,26 +165,9 @@ class KafkaConfig(
             this.consumerFactory = consumerFactory
             setConcurrency(kafkaProperties.consumer.semaphoreLimit)
             containerProperties.pollTimeout = kafkaProperties.consumer.maxWaitTime.toMillis()
+            // Manual Acknowledge 모드
+            containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
         }
-
-    /**
-     * JSON 역직렬화용 Consumer Factory
-     */
-    @Bean
-    fun jsonConsumerFactory(): ConsumerFactory<String, ProductUpdatedEvent> {
-        val configProps = buildCommonConfig().toMutableMap()
-
-        configProps.apply {
-            put(ConsumerConfig.GROUP_ID_CONFIG, kafkaProperties.groupName)
-            put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer::class.java)
-            put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer::class.java)
-            put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, kafkaProperties.consumer.autoOffsetReset)
-            put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, kafkaProperties.consumer.enableAutoCommit)
-            put(JsonDeserializer.TRUSTED_PACKAGES, "com.mediquitous.productpoc.*")
-        }
-
-        return DefaultKafkaConsumerFactory(configProps)
-    }
 
     // =====================================================
     // Security Configuration

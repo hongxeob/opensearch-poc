@@ -1,8 +1,8 @@
 package com.mediquitous.productpoc.service
 
+import com.mediquitous.productpoc.event.producer.SellerEventProducer
 import com.mediquitous.productpoc.repository.jpa.seller.SellerJpaRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -17,7 +17,7 @@ private val logger = KotlinLogging.logger {}
 @Transactional(readOnly = true)
 class SellerMigrationServiceImpl(
     private val sellerJpaRepository: SellerJpaRepository,
-    private val kafkaTemplate: KafkaTemplate<String, SellerUpdatedEvent>,
+    private val sellerEventProducer: SellerEventProducer,
 ) : SellerMigrationService {
     companion object {
         private const val BATCH_SIZE = 1000
@@ -57,8 +57,7 @@ class SellerMigrationServiceImpl(
             // 2. 각 셀러 ID에 대해 Kafka 이벤트 발행
             allSellerIds.forEach { sellerId ->
                 try {
-                    val event = SellerUpdatedEvent(id = sellerId)
-                    kafkaTemplate.send(TOPIC_SELLER_UPDATED, sellerId.toString(), event)
+                    sellerEventProducer.sendUpdated(sellerId)
                     logger.debug { "seller.updated 이벤트 발행: sellerId=$sellerId" }
                 } catch (e: Exception) {
                     // 실패해도 계속 진행 (Go 서버와 동일)
