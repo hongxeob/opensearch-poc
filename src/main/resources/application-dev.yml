@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:5432/zelda_product
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+
+redis:
+  enabled: true
+  write:
+    host: ${REDIS_HOST}
+
+kafka:
+  enabled: true
+  brokers:
+    - ${KAFKA_BROKERS}
+  group-name: dev-zelda-product-kotlin
+
+opensearch:
+  hosts: ${OPENSEARCH_HOST}

@@ -1,13 +1,13 @@
 spring:
   application:
-    name: product-search-service
+    name: ${SERVICE_NAME:zelda-product-kotlin}
 
-  # PostgreSQL 설정 (읽기 전용)
+  # PostgreSQL 설정
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/zelda_product
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://${DB_RW_HOST:localhost}:${DB_RW_PORT:5432}/${DB_RW_DBNAME:zelda}
+    username: ${DB_RW_USER:master}
+    password: ${DB_RW_PASSWORD:password}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
@@ -19,14 +19,14 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: none  # validate → none (DB 없어도 실행)
+      ddl-auto: none
     properties:
       hibernate:
         format_sql: true
         show_sql: false
     open-in-view: false
 
-  # Spring Kafka 자동 설정 비활성화 (커스텀 설정 사용)
+  # Spring 자동 설정 비활성화 (커스텀 설정 사용)
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
@@ -34,14 +34,13 @@ spring:
 
 # =====================================================
 # Redis 설정
-# Go 서버의 redis/config.go 구조와 동일
 # =====================================================
 redis:
-  enabled: false  # 로컬 개발 시 false, 운영 환경에서 true
+  enabled: ${REDIS_ENABLED:false}
   read:
-    host: localhost
-    port: 6379
-    password: ""
+    host: ${REDIS_READ_HOST:localhost}
+    port: ${REDIS_READ_PORT:6379}
+    password: ${REDIS_READ_PASSWORD:}
     database: 0
     pool:
       size: 10
@@ -52,11 +51,11 @@ redis:
       read: 3s
       write: 3s
     max-retries: 3
-    enable-tls: false
+    enable-tls: ${REDIS_READ_ENABLE_TLS:false}
   write:
-    host: localhost
-    port: 6379
-    password: ""
+    host: ${REDIS_WRITE_HOST:localhost}
+    port: ${REDIS_WRITE_PORT:6379}
+    password: ${REDIS_WRITE_PASSWORD:}
     database: 0
     pool:
       size: 10
@@ -67,24 +66,22 @@ redis:
       read: 3s
       write: 3s
     max-retries: 3
-    enable-tls: false
+    enable-tls: ${REDIS_WRITE_ENABLE_TLS:false}
 
 # =====================================================
 # Kafka 설정
-# Go 서버의 kafka/config.go 구조와 동일
 # =====================================================
 kafka:
-  enabled: false  # 로컬 개발 시 false, 운영 환경에서 true
-  brokers:
-    - localhost:9092
-  group-name: product-search-service
+  enabled: ${KAFKA_ENABLED:false}
+  brokers: ${KAFKA_BROKERS:localhost:9092}
+  group-name: ${KAFKA_GROUP_NAME:zelda-product-kotlin}
   topic-prefix: ""
   security:
-    protocol: PLAINTEXT  # PLAINTEXT, TLS, SASL_SCRAM, SASL_PLAINTEXT, SASL_IAM
-    mechanism: SCRAM-SHA-512
-    username: ""
-    password: ""
-    aws-region: ""
+    protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+    mechanism: ${KAFKA_SECURITY_MECHANISM:SCRAM-SHA-512}
+    username: ${KAFKA_SECURITY_USERNAME:}
+    password: ${KAFKA_SECURITY_PASSWORD:}
+    aws-region: ${AWS_REGION:ap-northeast-1}
   producer:
     max-retry: 3
     retry-backoff: 100ms
@@ -101,29 +98,34 @@ kafka:
     auto-offset-reset: earliest
     enable-auto-commit: false
 
+# =====================================================
 # OpenSearch 설정
+# =====================================================
 opensearch:
-  address: https://opensearch-cluster.dev.nugu.jp
-  hosts: localhost:9200
-  username: admin
-  password: admin
+  address: ${OPENSEARCH_ADDRESS:http://localhost:9200}
+  username: ${OPENSEARCH_USER:}
+  password: ${OPENSEARCH_PASSWORD:}
   connection-timeout: 5000
   socket-timeout: 60000
   indices:
-    products: zelda-products
-    sellers: zelda-sellers
+    products: ${OPENSEARCH_INDEX_PRODUCTS:zelda-products}
+    sellers: ${OPENSEARCH_INDEX_SELLERS:zelda-sellers}
 
+# =====================================================
 # Logging
+# =====================================================
 logging:
   level:
     root: INFO
-    com.mediquitous: DEBUG
-    org.springframework.web: DEBUG
+    com.mediquitous: ${LOGGER_LEVEL:DEBUG}
+    org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    org.opensearch: DEBUG
+    org.opensearch: INFO
 
+# =====================================================
 # SpringDoc OpenAPI 설정
+# =====================================================
 springdoc:
   api-docs:
     path: /api-docs
@@ -135,23 +137,27 @@ springdoc:
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
 
+# =====================================================
 # 서버 설정
+# =====================================================
 server:
-  port: 8081
+  port: ${SERVICE_PORT:8081}
   compression:
     enabled: true
   http2:
     enabled: true
 
+# =====================================================
 # 애플리케이션 설정
+# =====================================================
 app:
   cursor:
     default-size: 20
     max-size: 100
   cache:
     ttl:
-      product: 300  # 5분
-      category: 3600  # 1시간
+      product: 300
+      category: 3600
   batch:
-    flush-interval: 5000  # 5초
+    flush-interval: 5000
     flush-size: 100

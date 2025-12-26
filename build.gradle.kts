@@ -53,6 +53,9 @@ dependencies {
     // Logging
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
 
+    // Dotenv (.env 파일 로드)
+    implementation("me.paulschwarz:spring-dotenv:5.0.1")
+
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")

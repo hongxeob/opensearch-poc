@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/zelda_product
+    username: master
+    password: password
+
+redis:
+  enabled: false
+
+kafka:
+  enabled: false
+
+opensearch:
+  hosts: localhost:9200
+
+logging:
+  level:
+    com.mediquitous: DEBUG
