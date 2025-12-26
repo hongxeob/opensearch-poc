@@ -1,11 +1,14 @@
 package com.mediquitous.productpoc.repository.opensearch.query
 
+import org.opensearch.client.json.JsonData
 import org.opensearch.client.opensearch._types.FieldValue
 import org.opensearch.client.opensearch._types.SortOrder
 import org.opensearch.client.opensearch._types.mapping.FieldType
 import org.opensearch.client.opensearch._types.query_dsl.Query
 import org.opensearch.client.opensearch._types.query_dsl.TextQueryType
 import org.opensearch.client.opensearch.core.SearchRequest
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /**
  * 상품 검색 쿼리 빌더 (유틸리티)
@@ -15,11 +18,36 @@ import org.opensearch.client.opensearch.core.SearchRequest
  * - 카테고리 슬러그 검색 (buildCategorySlugQuery)
  * - 셀러 슬러그 검색 (buildSellerSlugQuery)
  * - 상품 ID 목록 검색 (buildProductIdsQuery)
+ * - 기획전 검색 (buildDisplayGroupQuery)
+ * - 카테고리+셀러 검색 (buildCategoryAndSellerSlugQuery)
+ * - 홈탭 검색 (buildHomeTabQuery)
+ * - 신상품 검색 (buildNewestQuery)
+ * - 추천 상품 검색 (buildRecommendByCodesQuery)
+ * - 카테고리 ID 검색 (buildCategoryIdQuery)
+ * - 리테일 스토어 검색 (buildRetailStoreQuery)
+ * - 키워드+필터 검색 (buildKeywordWithFiltersQuery)
  */
 object ProductSearchQueryBuilder {
     private const val MAX_KEYWORD_LENGTH = 120
     private const val PRODUCTS_INDEX = "zelda-products"
     private const val DEFAULT_ORDERING = "-released"
+
+    // Ordering Keys
+    private const val ORDERING_IN_STOCK = "in_stock"
+    private const val ORDERING_RELEASED = "released"
+    private const val ORDERING_PRODUCT_BEST_ORDER = "productbestorder"
+    private const val ORDERING_DISPLAY_GROUP_PRODUCT_SEQ = "displaygroupproduct__seq"
+    private const val ORDERING_SALES_AMOUNT = "sales_amount"
+
+    // Home Tab Types
+    enum class HomeTabType(
+        val sellerTypes: List<String>? = null,
+        val categorySlug: String? = null,
+    ) {
+        BRAND(sellerTypes = listOf("k_brand", "j_brand")),
+        DIRECTOR(sellerTypes = listOf("director", "trend_shoppingmall")),
+        BEAUTY(categorySlug = "beauty"),
+    }
 
     /**
      * 키워드 검색 쿼리 생성
@@ -411,4 +439,818 @@ object ProductSearchQueryBuilder {
             // 기타 text 필드 → .keyword 추가
             else -> "$fieldName.keyword"
         }
+
+    // ========== 추가 쿼리 빌더 메서드들 ==========
+
+    /**
+     * 기획전(Display Group) 검색 쿼리
+     *
+     * Go 서버의 by_display_group_id.go 로직 변환
+     */
+    fun buildDisplayGroupQuery(
+        displayGroupId: Long,
+        size: Int,
+        ordering: String? = null,
+        cursor: List<String>? = null,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.nested { n ->
+                                n
+                                    .path("display_group")
+                                    .query { dq ->
+                                        dq.term { t ->
+                                            t
+                                                .field("display_group.id")
+                                                .value(FieldValue.of(displayGroupId))
+                                        }
+                                    }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("display") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addDisplayGroupSorting(ordering, displayGroupId, cursor)
+            }.build()
+
+    /**
+     * 카테고리 + 셀러 슬러그 검색 쿼리
+     *
+     * Go 서버의 by_category_slug_seller_slug.go 로직 변환
+     */
+    fun buildCategoryAndSellerSlugQuery(
+        categorySlug: String,
+        sellerSlug: String,
+        size: Int,
+        ordering: String? = null,
+        cursor: List<String>? = null,
+    ): SearchRequest {
+        val shouldFilterSelling = !containsInStockOrdering(ordering)
+
+        return SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.nested { n ->
+                                n
+                                    .path("categories")
+                                    .query { cq ->
+                                        cq.term { t ->
+                                            t
+                                                .field("categories.slug.lc")
+                                                .value(FieldValue.of(categorySlug.lowercase()))
+                                        }
+                                    }
+                            }
+                        }.must { m ->
+                            m.nested { n ->
+                                n
+                                    .path("seller")
+                                    .query { sq ->
+                                        sq.term { t ->
+                                            t
+                                                .field("seller.slug.lc")
+                                                .value(FieldValue.of(sellerSlug.lowercase()))
+                                        }
+                                    }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("display") } }
+                        .apply {
+                            if (shouldFilterSelling) {
+                                filter { f -> f.exists { e -> e.field("selling") } }
+                            }
+                        }.mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addCategorySellerSorting(ordering, cursor)
+            }.build()
+    }
+
+    /**
+     * 홈탭 타입별 검색 쿼리
+     *
+     * Go 서버의 by_home_tab_type.go 로직 변환
+     * - brand: k_brand, j_brand 셀러
+     * - director: director, trend_shoppingmall 셀러
+     * - beauty: beauty 카테고리
+     */
+    fun buildHomeTabQuery(
+        tabType: String,
+        size: Int,
+        cursor: List<String>? = null,
+    ): SearchRequest {
+        val homeTab =
+            HomeTabType.entries.find { it.name.equals(tabType, ignoreCase = true) }
+                ?: throw IllegalArgumentException("Unsupported home tab type: $tabType")
+
+        return SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            when {
+                                homeTab.sellerTypes != null -> {
+                                    m.nested { n ->
+                                        n
+                                            .path("seller")
+                                            .query { sq ->
+                                                sq.terms { t ->
+                                                    t
+                                                        .field("seller.type")
+                                                        .terms { tf ->
+                                                            tf.value(homeTab.sellerTypes.map { FieldValue.of(it) })
+                                                        }
+                                                }
+                                            }
+                                    }
+                                }
+
+                                homeTab.categorySlug != null -> {
+                                    m.nested { n ->
+                                        n
+                                            .path("categories")
+                                            .query { cq ->
+                                                cq.term { t ->
+                                                    t
+                                                        .field("categories.slug.lc")
+                                                        .value(FieldValue.of(homeTab.categorySlug))
+                                                }
+                                            }
+                                    }
+                                }
+
+                                else -> {
+                                    m
+                                }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("display") } }
+                        .filter { f -> f.exists { e -> e.field("selling") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .sort { s ->
+                s.field { f ->
+                    f
+                        .field("best_order.sales_amount")
+                        .order(SortOrder.Desc)
+                        .missing { mv -> mv.stringValue("_last") }
+                }
+            }.sort { s -> s.field { f -> f.field("id").order(SortOrder.Asc) } }
+            .apply {
+                cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+            }.build()
+    }
+
+    /**
+     * 신상품 검색 쿼리
+     *
+     * Go 서버의 by_newest.go 로직 변환
+     */
+    fun buildNewestQuery(
+        sellerType: String? = null,
+        releasedGte: String? = null,
+        categorySlug: String? = null,
+        ordering: String? = null,
+        size: Int,
+        cursor: List<String>? = null,
+    ): SearchRequest {
+        val defaultReleasedGte =
+            releasedGte ?: LocalDate.now().minusMonths(3).format(DateTimeFormatter.ISO_DATE)
+
+        val categorySlugs =
+            categorySlug
+                ?.split(",")
+                ?.map { it.trim().lowercase() }
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+
+        return SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.range { r ->
+                                r
+                                    .field("released")
+                                    .gte(JsonData.of(defaultReleasedGte))
+                            }
+                        }.apply {
+                            // 카테고리 필터 추가
+                            categorySlugs.forEach { slug ->
+                                must { m ->
+                                    m.nested { n ->
+                                        n
+                                            .path("categories")
+                                            .query { cq ->
+                                                cq.term { t ->
+                                                    t
+                                                        .field("categories.slug.lc")
+                                                        .value(FieldValue.of(slug))
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+
+                            // 셀러 타입 필터 추가
+                            if (!sellerType.isNullOrBlank()) {
+                                must { m ->
+                                    m.nested { n ->
+                                        n
+                                            .path("seller")
+                                            .query { sq ->
+                                                sq.term { t ->
+                                                    t
+                                                        .field("seller.type")
+                                                        .value(FieldValue.of(sellerType))
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("selling") } }
+                        .filter { f -> f.exists { e -> e.field("display") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addNewestSorting(ordering, cursor)
+            }.build()
+    }
+
+    /**
+     * 추천 상품 코드 검색 쿼리
+     *
+     * Go 서버의 recommend_by_codes.go 로직 변환
+     */
+    fun buildRecommendByCodesQuery(
+        codes: List<String>,
+        size: Int,
+        cursor: List<String>? = null,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m -> m.exists { e -> e.field("selling") } }
+                        .must { m ->
+                            m.terms { t ->
+                                t
+                                    .field("code")
+                                    .terms { tf ->
+                                        tf.value(codes.map { FieldValue.of(it) })
+                                    }
+                            }
+                        }.mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .sort { s -> s.field { f -> f.field("id").order(SortOrder.Asc) } }
+            .apply {
+                cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+            }.build()
+
+    /**
+     * 카테고리 ID 검색 쿼리
+     *
+     * Go 서버의 by_category_id.go 로직 변환
+     */
+    fun buildCategoryIdQuery(
+        categoryId: Long,
+        size: Int,
+        ordering: String? = null,
+        cursor: List<String>? = null,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.nested { n ->
+                                n
+                                    .path("categories")
+                                    .query { cq ->
+                                        cq.term { t ->
+                                            t
+                                                .field("categories.id")
+                                                .value(FieldValue.of(categoryId))
+                                        }
+                                    }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("display") } }
+                        .filter { f -> f.exists { e -> e.field("selling") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addCategoryIdSorting(ordering, cursor)
+            }.build()
+
+    /**
+     * 리테일 스토어명 검색 쿼리
+     *
+     * Go 서버의 by_retail_store_name.go 로직 변환
+     */
+    fun buildRetailStoreQuery(
+        retailStoreName: String,
+        size: Int,
+        ordering: String? = null,
+        cursor: List<String>? = null,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.nested { n ->
+                                n
+                                    .path("stock")
+                                    .query { sq ->
+                                        sq.bool { sb ->
+                                            sb
+                                                .must { sm ->
+                                                    sm.term { t ->
+                                                        t
+                                                            .field("stock.retail_store_name.lc")
+                                                            .value(FieldValue.of(retailStoreName.lowercase()))
+                                                    }
+                                                }.must { sm ->
+                                                    sm.range { r ->
+                                                        r
+                                                            .field("stock.quantity")
+                                                            .gt(JsonData.of(0))
+                                                    }
+                                                }
+                                        }
+                                    }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("selling") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addRetailStoreSorting(cursor)
+            }.build()
+
+    /**
+     * 키워드 + 필터(셀러타입, 카테고리) 검색 쿼리
+     *
+     * Go 서버의 by_keyword_with_seller_type_category.go 로직 변환
+     */
+    fun buildKeywordWithFiltersQuery(
+        keyword: String,
+        sellerType: String? = null,
+        categorySlug: String? = null,
+        ordering: String? = null,
+        size: Int,
+        cursor: List<String>? = null,
+    ): SearchRequest {
+        val trimmedKeyword = keyword.trim().take(MAX_KEYWORD_LENGTH)
+
+        return SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.bool { sb ->
+                                sb
+                                    .should(buildProductNameQuery(trimmedKeyword))
+                                    .should(buildProductNameNgramQuery(trimmedKeyword))
+                                    .should(buildDescriptionQuery(trimmedKeyword))
+                                    .should(buildBarcodeQuery(trimmedKeyword))
+                                    .should(buildCodeQuery(trimmedKeyword))
+                                    .should(buildSellerQuery(trimmedKeyword))
+                                    .should(buildCategoryQuery(trimmedKeyword))
+                                    .should(buildOptionQuery(trimmedKeyword))
+                                    .should(buildVariantBarcodeQuery(trimmedKeyword))
+                                    .minimumShouldMatch("1")
+                            }
+                        }.filter { f -> f.exists { e -> e.field("display") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                        .apply {
+                            // 셀러 타입 필터
+                            if (!sellerType.isNullOrBlank()) {
+                                filter { f ->
+                                    f.nested { n ->
+                                        n
+                                            .path("seller")
+                                            .query { sq ->
+                                                sq.term { t ->
+                                                    t
+                                                        .field("seller.type")
+                                                        .value(FieldValue.of(sellerType))
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+
+                            // 카테고리 필터
+                            if (!categorySlug.isNullOrBlank()) {
+                                filter { f ->
+                                    f.nested { n ->
+                                        n
+                                            .path("categories")
+                                            .query { cq ->
+                                                cq.term { t ->
+                                                    t
+                                                        .field("categories.slug")
+                                                        .value(FieldValue.of(categorySlug))
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                }
+            }.size(size)
+            .apply {
+                addKeywordFiltersSorting(ordering, trimmedKeyword, cursor)
+            }.build()
+    }
+
+    /**
+     * 상품 ID 목록으로 검색 (정렬 없이 - 베스트 랭킹, 좋아요 등에서 사용)
+     *
+     * Go 서버의 by_ids.go 로직 변환
+     */
+    fun buildProductIdsBulkQuery(
+        productIds: List<Long>,
+        size: Int,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .must { m ->
+                            m.terms { t ->
+                                t
+                                    .field("id")
+                                    .terms { tf ->
+                                        tf.value(productIds.map { FieldValue.of(it) })
+                                    }
+                            }
+                        }.filter { f -> f.exists { e -> e.field("selling") } }
+                        .filter { f -> f.exists { e -> e.field("display") } }
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .build()
+
+    // ========== Sorting Helper Methods ==========
+
+    /**
+     * 기획전 정렬
+     */
+    private fun SearchRequest.Builder.addDisplayGroupSorting(
+        ordering: String?,
+        displayGroupId: Long,
+        cursor: List<String>?,
+    ): SearchRequest.Builder {
+        val effectiveOrdering = ordering ?: ORDERING_DISPLAY_GROUP_PRODUCT_SEQ
+
+        effectiveOrdering.split(",").map { it.trim() }.forEach { field ->
+            val (sortField, direction) = parseSortField(field)
+            val order = if (direction == "desc") SortOrder.Desc else SortOrder.Asc
+
+            when (sortField) {
+                ORDERING_IN_STOCK -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("is_selling")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.longValue(0) }
+                        }
+                    }
+                }
+
+                ORDERING_DISPLAY_GROUP_PRODUCT_SEQ -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("display_group.product_seq")
+                                .order(order)
+                                .nested { n ->
+                                    n
+                                        .path("display_group")
+                                        .filter { fq ->
+                                            fq.term { t ->
+                                                t
+                                                    .field("display_group.id")
+                                                    .value(FieldValue.of(displayGroupId))
+                                            }
+                                        }
+                                }
+                        }
+                    }
+                    sort { s ->
+                        s.field { f ->
+                            f.field("display").order(SortOrder.Desc)
+                        }
+                    }
+                }
+            }
+        }
+
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Asc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    /**
+     * 카테고리 + 셀러 정렬
+     */
+    private fun SearchRequest.Builder.addCategorySellerSorting(
+        ordering: String?,
+        cursor: List<String>?,
+    ): SearchRequest.Builder {
+        val effectiveOrdering = ordering ?: "-$ORDERING_RELEASED"
+
+        effectiveOrdering.split(",").map { it.trim() }.forEach { field ->
+            val (sortField, direction) = parseSortField(field)
+            val order = if (direction == "desc") SortOrder.Desc else SortOrder.Asc
+
+            when (sortField) {
+                ORDERING_IN_STOCK -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("is_selling")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.longValue(0) }
+                        }
+                    }
+                }
+
+                ORDERING_RELEASED -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("released")
+                                .order(order)
+                                .missing { mv -> mv.longValue(-1) }
+                        }
+                    }
+                }
+            }
+        }
+
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    /**
+     * 신상품 정렬
+     */
+    private fun SearchRequest.Builder.addNewestSorting(
+        ordering: String?,
+        cursor: List<String>?,
+    ): SearchRequest.Builder {
+        ordering?.split(",")?.map { it.trim() }?.forEach { field ->
+            val (sortField, direction) = parseSortField(field)
+            val order = if (direction == "desc") SortOrder.Desc else SortOrder.Asc
+
+            when (sortField) {
+                ORDERING_RELEASED -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("released")
+                                .order(order)
+                                .missing { mv -> mv.longValue(-1) }
+                        }
+                    }
+                }
+
+                ORDERING_PRODUCT_BEST_ORDER -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.order_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.like_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.cart_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                }
+            }
+        }
+
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    /**
+     * 카테고리 ID 정렬
+     */
+    private fun SearchRequest.Builder.addCategoryIdSorting(
+        ordering: String?,
+        cursor: List<String>?,
+    ): SearchRequest.Builder {
+        ordering?.split(",")?.map { it.trim() }?.forEach { field ->
+            val (sortField, direction) = parseSortField(field)
+            val order = if (direction == "desc") SortOrder.Desc else SortOrder.Asc
+
+            when (sortField) {
+                ORDERING_RELEASED -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("released")
+                                .order(order)
+                                .missing { mv -> mv.longValue(-1) }
+                        }
+                    }
+                }
+
+                ORDERING_SALES_AMOUNT -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.sales_amount")
+                                .order(order)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                }
+            }
+        }
+
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    /**
+     * 리테일 스토어 정렬
+     */
+    private fun SearchRequest.Builder.addRetailStoreSorting(cursor: List<String>?): SearchRequest.Builder {
+        sort { s ->
+            s.field { f ->
+                f
+                    .field("best_order.order_count")
+                    .order(SortOrder.Desc)
+                    .missing { mv -> mv.stringValue("_last") }
+            }
+        }
+        sort { s ->
+            s.field { f ->
+                f
+                    .field("best_order.like_count")
+                    .order(SortOrder.Desc)
+                    .missing { mv -> mv.stringValue("_last") }
+            }
+        }
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    /**
+     * 키워드 + 필터 정렬
+     */
+    private fun SearchRequest.Builder.addKeywordFiltersSorting(
+        ordering: String?,
+        keyword: String,
+        cursor: List<String>?,
+    ): SearchRequest.Builder {
+        // 키워드가 없고 정렬 조건도 없으면 ID 정렬만
+        if (keyword.isBlank() && ordering.isNullOrBlank()) {
+            sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+            cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+            return this
+        }
+
+        // 정렬 조건이 없으면 점수 기반 정렬
+        if (ordering.isNullOrBlank()) {
+            sort { s -> s.score { it.order(SortOrder.Desc) } }
+            sort { s -> s.field { f -> f.field("id").order(SortOrder.Asc) } }
+            cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+            return this
+        }
+
+        ordering.split(",").map { it.trim() }.forEach { field ->
+            val (sortField, direction) = parseSortField(field)
+            val order = if (direction == "desc") SortOrder.Desc else SortOrder.Asc
+
+            when (sortField) {
+                ORDERING_RELEASED -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("released")
+                                .order(order)
+                                .missing { mv -> mv.longValue(-1) }
+                        }
+                    }
+                }
+
+                ORDERING_PRODUCT_BEST_ORDER -> {
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.order_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.like_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                    sort { s ->
+                        s.field { f ->
+                            f
+                                .field("best_order.cart_count")
+                                .order(SortOrder.Desc)
+                                .missing { mv -> mv.stringValue("_last") }
+                        }
+                    }
+                }
+            }
+        }
+
+        sort { s -> s.field { f -> f.field("id").order(SortOrder.Desc) } }
+        cursor?.let { searchAfter(it.map { v -> FieldValue.of(v) }) }
+
+        return this
+    }
+
+    // ========== Utility Methods ==========
+
+    /**
+     * 정렬 필드 파싱
+     * "-released" -> ("released", "desc")
+     * "released" -> ("released", "asc")
+     */
+    private fun parseSortField(field: String): Pair<String, String> {
+        val trimmed = field.trim()
+        return if (trimmed.startsWith("-")) {
+            trimmed.substring(1) to "desc"
+        } else {
+            trimmed to "asc"
+        }
+    }
+
+    /**
+     * in_stock 정렬 포함 여부 확인
+     */
+    private fun containsInStockOrdering(ordering: String?): Boolean {
+        if (ordering.isNullOrBlank()) return false
+
+        return ordering.split(",").any { field ->
+            val (sortField, _) = parseSortField(field)
+            sortField == ORDERING_IN_STOCK
+        }
+    }
 }

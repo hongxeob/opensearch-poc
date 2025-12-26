@@ -134,6 +134,256 @@ class OpenSearchRepositoryImpl(
         return parseSearchResponse(response, size)
     }
 
+    override fun searchByDisplayGroupId(
+        displayGroupId: Long,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 기획전 검색: displayGroupId=$displayGroupId" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildDisplayGroupQuery(
+                displayGroupId = displayGroupId,
+                size = size + 1,
+                ordering = ordering,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "기획전 검색 실패: displayGroupId=$displayGroupId" }
+                throw OpenSearchException("기획전 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByCategoryAndSellerSlug(
+        categorySlug: String,
+        sellerSlug: String,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 카테고리+셀러 검색: categorySlug=$categorySlug, sellerSlug=$sellerSlug" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildCategoryAndSellerSlugQuery(
+                categorySlug = categorySlug,
+                sellerSlug = sellerSlug,
+                size = size + 1,
+                ordering = ordering,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "카테고리+셀러 검색 실패: categorySlug=$categorySlug, sellerSlug=$sellerSlug" }
+                throw OpenSearchException("카테고리+셀러 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByHomeTab(
+        tabType: String,
+        size: Int,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 홈탭 검색: tabType=$tabType" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildHomeTabQuery(
+                tabType = tabType,
+                size = size + 1,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "홈탭 검색 실패: tabType=$tabType" }
+                throw OpenSearchException("홈탭 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchNewest(
+        sellerType: String?,
+        releasedGte: String?,
+        categorySlug: String?,
+        ordering: String?,
+        size: Int,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 신상품 검색: sellerType=$sellerType, categorySlug=$categorySlug" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildNewestQuery(
+                sellerType = sellerType,
+                releasedGte = releasedGte,
+                categorySlug = categorySlug,
+                ordering = ordering,
+                size = size + 1,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "신상품 검색 실패" }
+                throw OpenSearchException("신상품 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByRecommendCodes(
+        codes: List<String>,
+        size: Int,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 추천 상품 검색: codes=${codes.size}개" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildRecommendByCodesQuery(
+                codes = codes,
+                size = size + 1,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "추천 상품 검색 실패: codes=$codes" }
+                throw OpenSearchException("추천 상품 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByCategoryId(
+        categoryId: Long,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 카테고리 ID 검색: categoryId=$categoryId" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildCategoryIdQuery(
+                categoryId = categoryId,
+                size = size + 1,
+                ordering = ordering,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "카테고리 ID 검색 실패: categoryId=$categoryId" }
+                throw OpenSearchException("카테고리 ID 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByRetailStoreName(
+        retailStoreName: String,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 리테일스토어 검색: retailStoreName=$retailStoreName" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildRetailStoreQuery(
+                retailStoreName = retailStoreName,
+                size = size + 1,
+                ordering = ordering,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "리테일스토어 검색 실패: retailStoreName=$retailStoreName" }
+                throw OpenSearchException("리테일스토어 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByKeywordWithFilters(
+        keyword: String,
+        sellerType: String?,
+        categorySlug: String?,
+        ordering: String?,
+        size: Int,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 키워드+필터 검색: keyword=$keyword, sellerType=$sellerType, categorySlug=$categorySlug" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildKeywordWithFiltersQuery(
+                keyword = keyword,
+                sellerType = sellerType,
+                categorySlug = categorySlug,
+                ordering = ordering,
+                size = size + 1,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "키워드+필터 검색 실패: keyword=$keyword" }
+                throw OpenSearchException("키워드+필터 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
+    }
+
+    override fun searchByProductIdsBulk(productIds: List<Long>): SearchResult {
+        logger.debug { "OpenSearch 상품 ID 벌크 검색: productIds=${productIds.size}개" }
+
+        val searchRequest =
+            ProductSearchQueryBuilder.buildProductIdsBulkQuery(
+                productIds = productIds,
+                size = productIds.size,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "상품 ID 벌크 검색 실패: productIds=$productIds" }
+                throw OpenSearchException("상품 ID 벌크 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, productIds.size)
+    }
+
     // ========== Private Helper Functions ==========
 
     /**
