@@ -3,11 +3,14 @@ package com.mediquitous.productpoc.service
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.model.vo.BestRankingPath
+import com.mediquitous.productpoc.model.vo.LikedProduct
 import com.mediquitous.productpoc.model.vo.RankedProduct
+import com.mediquitous.productpoc.repository.jpa.customer.LikeJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.ProductRankingJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.RankingSpecificationJpaRepository
 import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 
 private val logger = KotlinLogging.logger {}
@@ -27,6 +30,7 @@ class ProductSearchServiceImpl(
     private val openSearchRepository: OpenSearchRepository,
     private val rankingSpecificationJpaRepository: RankingSpecificationJpaRepository,
     private val productRankingJpaRepository: ProductRankingJpaRepository,
+    private val likeJpaRepository: LikeJpaRepository,
 ) : ProductSearchService {
     // =====================================================
     // 단건 조회
@@ -391,12 +395,43 @@ class ProductSearchServiceImpl(
         size: Int,
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> {
-        logger.info { "좋아요 상품 검색: customerId=$customerId, size=$size" }
+        logger.info { "좋아요 상품 검색: customerId=$customerId, size=$size, cursor=$cursor" }
 
-        // TODO: PostgreSQL에서 좋아요 상품 ID 조회 후 OpenSearch 검색
-        // 현재는 DB 연동이 필요
-        logger.warn { "좋아요 상품 검색은 DB 연동이 필요합니다" }
-        return CursorPaginationResponse.empty()
+        // 1. 파라미터 검증
+        require(customerId > 0) { "customerId는 양수여야 합니다" }
+
+        // 2. 좋아요 상품 ID 목록 조회 (size + 1로 다음 페이지 여부 확인)
+        val likedProducts = getLikedProductIds(customerId, size, cursor)
+        if (likedProducts.isEmpty()) {
+            logger.debug { "좋아요한 상품이 없습니다: customerId=$customerId" }
+            return CursorPaginationResponse.empty()
+        }
+
+        // 3. 다음 커서 계산 (size + 1개를 조회했으므로)
+        val hasNext = likedProducts.size > size
+        val nextCursor =
+            if (hasNext) {
+                val nextLikeId = likedProducts[size].likeId
+                encodeLongCursor(nextLikeId)
+            } else {
+                null
+            }
+
+        // 4. 실제 반환할 상품 ID 목록 (size 개수만큼)
+        val productIdsToSearch = likedProducts.take(size).map { it.productId }
+
+        // 5. OpenSearch에서 상품 정보 조회
+        val searchResult = openSearchRepository.searchByProductIdsBulk(productIdsToSearch)
+
+        // 6. 원본 좋아요 순서 복원 (최신 좋아요 순)
+        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.products)
+
+        return CursorPaginationResponse(
+            count = searchResult.totalHits,
+            results = orderedProducts,
+            nextCursor = nextCursor,
+            previousCursor = null,
+        )
     }
 
     override fun getRecentlyViewedProducts(
@@ -510,8 +545,8 @@ class ProductSearchServiceImpl(
 
         return projections.map { projection ->
             RankedProduct(
-                productId = projection.getProductId(),
-                rank = projection.getRank(),
+                productId = projection.productId,
+                rank = projection.rank,
             )
         }
     }
@@ -555,5 +590,59 @@ class ProductSearchServiceImpl(
         } catch (e: Exception) {
             logger.warn { "커서 디코딩 실패: $cursor" }
             0
+        }
+
+    // =====================================================
+    // Liked Products Helper Methods
+    // =====================================================
+
+    /**
+     * 좋아요 상품 ID 조회 (커서 유무에 따라 분기)
+     */
+    private fun getLikedProductIds(
+        customerId: Long,
+        size: Int,
+        cursor: String?,
+    ): List<LikedProduct> {
+        val limit = size + 1 // 다음 페이지 여부 확인용
+        val pageable = PageRequest.of(0, limit)
+        val decodedCursor = cursor?.let { decodeLongCursor(it) }
+
+        val projections =
+            if (decodedCursor == null) {
+                likeJpaRepository.findLikedProductIdsByCustomerId(customerId, pageable)
+            } else {
+                likeJpaRepository.findLikedProductIdsByCustomerIdWithCursor(customerId, decodedCursor, pageable)
+            }
+
+        return projections.map { projection ->
+            LikedProduct(
+                likeId = projection.likeId,
+                productId = projection.productId,
+            )
+        }
+    }
+
+    /**
+     * Long 커서 인코딩 (Base64)
+     */
+    private fun encodeLongCursor(value: Long): String =
+        java.util.Base64
+            .getUrlEncoder()
+            .encodeToString(value.toString().toByteArray())
+
+    /**
+     * Long 커서 디코딩 (Base64)
+     */
+    private fun decodeLongCursor(cursor: String): Long? =
+        try {
+            String(
+                java.util.Base64
+                    .getUrlDecoder()
+                    .decode(cursor),
+            ).toLong()
+        } catch (e: Exception) {
+            logger.warn { "Long 커서 디코딩 실패: $cursor" }
+            null
         }
 }

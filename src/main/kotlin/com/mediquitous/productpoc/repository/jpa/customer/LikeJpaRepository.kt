@@ -1,10 +1,19 @@
 package com.mediquitous.productpoc.repository.jpa.customer
 
 import com.mediquitous.productpoc.repository.jpa.customer.entity.LikeEntity
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
+
+/**
+ * 좋아요한 상품 Projection
+ */
+interface LikedProductProjection {
+    val likeId: Long
+    val productId: Long
+}
 
 /**
  * 좋아요 JPA Repository
@@ -39,7 +48,7 @@ interface LikeJpaRepository : JpaRepository<LikeEntity, Long> {
      */
     @Query(
         """
-        SELECT l.id, l.productId
+        SELECT l.id AS likeId, l.productId AS productId
         FROM LikeEntity l
         LEFT JOIN ProductEntity p ON l.productId = p.id
         WHERE l.customerId = :customerId
@@ -51,8 +60,8 @@ interface LikeJpaRepository : JpaRepository<LikeEntity, Long> {
     )
     fun findLikedProductIdsByCustomerId(
         @Param("customerId") customerId: Long,
-        @Param("limit") limit: Int,
-    ): List<Array<Long>>
+        pageable: Pageable,
+    ): List<LikedProductProjection>
 
     /**
      * 고객이 좋아요한 상품 ID 목록 조회 (커서 페이징)
@@ -61,22 +70,22 @@ interface LikeJpaRepository : JpaRepository<LikeEntity, Long> {
      */
     @Query(
         """
-        SELECT l.id, l.productId
+        SELECT l.id AS likeId, l.productId AS productId
         FROM LikeEntity l
         LEFT JOIN ProductEntity p ON l.productId = p.id
         WHERE l.customerId = :customerId
         AND l.target = 'product'
         AND p.display IS NOT NULL
         AND p.deleted IS NULL
-        AND l.id <= :cursor
+        AND l.id < :cursor
         ORDER BY l.id DESC
     """,
     )
     fun findLikedProductIdsByCustomerIdWithCursor(
         @Param("customerId") customerId: Long,
         @Param("cursor") cursor: Long,
-        @Param("limit") limit: Int,
-    ): List<Array<Long>>
+        pageable: Pageable,
+    ): List<LikedProductProjection>
 
     /**
      * 고객이 좋아요한 셀러 ID 목록 조회

@@ -8,12 +8,10 @@ import org.springframework.stereotype.Repository
 
 /**
  * 랭킹 상품 Projection
- *
- * Native Query 결과를 타입 안전하게 매핑
  */
 interface RankedProductProjection {
-    fun getProductId(): Long
-    fun getRank(): Int
+    val productId: Long
+    val rank: Int
 }
 
 /**
