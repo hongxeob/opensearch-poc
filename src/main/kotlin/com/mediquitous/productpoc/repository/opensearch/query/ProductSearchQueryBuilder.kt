@@ -831,58 +831,61 @@ object ProductSearchQueryBuilder {
             .index(PRODUCTS_INDEX)
             .query { q ->
                 q.bool { b ->
-                    b
-                        .must { m ->
-                            m.bool { sb ->
-                                sb
-                                    .should(buildProductNameQuery(trimmedKeyword))
-                                    .should(buildProductNameNgramQuery(trimmedKeyword))
-                                    .should(buildDescriptionQuery(trimmedKeyword))
-                                    .should(buildBarcodeQuery(trimmedKeyword))
-                                    .should(buildCodeQuery(trimmedKeyword))
-                                    .should(buildSellerQuery(trimmedKeyword))
-                                    .should(buildCategoryQuery(trimmedKeyword))
-                                    .should(buildOptionQuery(trimmedKeyword))
-                                    .should(buildVariantBarcodeQuery(trimmedKeyword))
-                                    .minimumShouldMatch("1")
-                            }
-                        }.filter { f -> f.exists { e -> e.field("display") } }
-                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
-                        .apply {
-                            // 셀러 타입 필터
-                            if (!sellerType.isNullOrBlank()) {
-                                filter { f ->
-                                    f.nested { n ->
-                                        n
-                                            .path("seller")
-                                            .query { sq ->
-                                                sq.term { t ->
-                                                    t
-                                                        .field("seller.type")
-                                                        .value(FieldValue.of(sellerType))
-                                                }
+                    b.must { m ->
+                        m.bool { sb ->
+                            sb
+                                .should(buildProductNameQuery(trimmedKeyword))
+                                .should(buildProductNameNgramQuery(trimmedKeyword))
+                                .should(buildDescriptionQuery(trimmedKeyword))
+                                .should(buildBarcodeQuery(trimmedKeyword))
+                                .should(buildCodeQuery(trimmedKeyword))
+                                .should(buildSellerQuery(trimmedKeyword)) // nested seller keyword
+                                .should(buildCategoryQuery(trimmedKeyword))
+                                .should(buildOptionQuery(trimmedKeyword))
+                                .should(buildVariantBarcodeQuery(trimmedKeyword))
+                                .minimumShouldMatch("1")
+                        }
+                    }
+                    b.filter { f ->
+                        f.bool { fb ->
+                            fb.must { it.exists { e -> e.field("display") } }
+                            fb.mustNot { it.exists { e -> e.field("deleted") } }
+                        }
+                    }
+                    b.apply {
+                        if (!sellerType.isNullOrBlank()) {
+                            b.filter { f ->
+                                f.nested { n ->
+                                    n
+                                        .path("seller")
+                                        .query { sq ->
+                                            sq.term { t ->
+                                                t
+                                                    .field("seller.type.keyword")
+                                                    .value(FieldValue.of(sellerType))
                                             }
-                                    }
-                                }
-                            }
-
-                            // 카테고리 필터
-                            if (!categorySlug.isNullOrBlank()) {
-                                filter { f ->
-                                    f.nested { n ->
-                                        n
-                                            .path("categories")
-                                            .query { cq ->
-                                                cq.term { t ->
-                                                    t
-                                                        .field("categories.slug")
-                                                        .value(FieldValue.of(categorySlug))
-                                                }
-                                            }
-                                    }
+                                        }
                                 }
                             }
                         }
+
+                        // 4. category filter
+                        if (!categorySlug.isNullOrBlank()) {
+                            b.filter { f ->
+                                f.nested { n ->
+                                    n
+                                        .path("categories")
+                                        .query { cq ->
+                                            cq.term { t ->
+                                                t
+                                                    .field("categories.slug")
+                                                    .value(FieldValue.of(categorySlug))
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                    }
                 }
             }.size(size)
             .apply {
@@ -890,11 +893,11 @@ object ProductSearchQueryBuilder {
             }.build()
     }
 
-    /**
-     * 상품 ID 목록으로 검색 (정렬 없이 - 베스트 랭킹, 좋아요 등에서 사용)
-     *
-     * Go 서버의 by_ids.go 로직 변환
-     */
+	/*
+	 * 상품 ID 목록으로 검색 (정렬 없이 - 베스트 랭킹, 좋아요 등에서 사용)
+	 *
+	 * Go 서버의 by_ids.go 로직 변환
+	 */
     fun buildProductIdsBulkQuery(
         productIds: List<Long>,
         size: Int,

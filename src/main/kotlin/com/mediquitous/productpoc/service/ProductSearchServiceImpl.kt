@@ -124,6 +124,7 @@ class ProductSearchServiceImpl(
         logger.info { "셀러 타입 검색: type=$type, size=$size" }
 
         // 홈탭 타입 검색으로 대체 (brand, director, beauty 등)
+        // todo -> 대체 X 고쳐야함
         val searchResult =
             openSearchRepository.searchByHomeTab(
                 tabType = type,
