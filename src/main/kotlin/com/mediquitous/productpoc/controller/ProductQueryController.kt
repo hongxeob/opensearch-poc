@@ -61,41 +61,20 @@ class ProductQueryController(
     // 기획전/셀러/카테고리별 조회
     // =====================================================
 
-    @Operation(summary = "카테고리 슬러그로 상품 조회")
+    @Operation(summary = "카테고리별 상품 조회", description = "특정 카테고리의 상품을 조회합니다")
     @GetMapping("/category")
-    fun getProductsByCategorySlug(
+    fun getProductsByCategory(
         @Parameter(description = "카테고리 슬러그", required = true)
         @RequestParam category: String,
-        @Parameter(description = "정렬 필드")
-        @RequestParam(required = false)
-        ordering: String?,
+        @Parameter(description = "정렬 필드 (예: productbestorder, -released)")
+        @RequestParam(required = false) ordering: String?,
         @Parameter(description = "페이지 크기 (1-100)")
         @RequestParam(defaultValue = "20")
         @Min(1)
-        @Max(100)
-        size: Int,
-        @Parameter(description = "커서")
-        @RequestParam(required = false)
-        cursor: String?,
+        @Max(100) size: Int,
+        @Parameter(description = "페이지네이션 커서")
+        @RequestParam(required = false) cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> = productSearchService.getProductsByCategory(category, ordering, size, cursor)
-
-    @Operation(summary = "셀러 슬러그로 상품 조회")
-    @GetMapping("/seller")
-    fun getProductsBySellerSlug(
-        @Parameter(description = "셀러 슬러그", required = true)
-        @RequestParam("seller__slug") sellerSlug: String,
-        @Parameter(description = "정렬 필드")
-        @RequestParam(required = false)
-        ordering: String?,
-        @Parameter(description = "페이지 크기 (1-100)")
-        @RequestParam(defaultValue = "20")
-        @Min(1)
-        @Max(100)
-        size: Int,
-        @Parameter(description = "커서")
-        @RequestParam(required = false)
-        cursor: String?,
-    ): CursorPaginationResponse<SimpleProductDto> = productSearchService.getProductsBySeller(sellerSlug, ordering, size, cursor)
 
     @Operation(summary = "기획전별 상품 조회", description = "특정 기획전에 포함된 상품을 조회합니다")
     @GetMapping("/display-group")
@@ -159,21 +138,6 @@ class ProductQueryController(
             size,
             cursor,
         )
-
-    @Operation(summary = "카테고리별 상품 조회", description = "특정 카테고리의 상품을 조회합니다")
-    @GetMapping("/category")
-    fun getProductsByCategory(
-        @Parameter(description = "카테고리 슬러그", required = true)
-        @RequestParam category: String,
-        @Parameter(description = "정렬 필드 (예: productbestorder, -released)")
-        @RequestParam(required = false) ordering: String?,
-        @Parameter(description = "페이지 크기 (1-100)")
-        @RequestParam(defaultValue = "20")
-        @Min(1)
-        @Max(100) size: Int,
-        @Parameter(description = "페이지네이션 커서")
-        @RequestParam(required = false) cursor: String?,
-    ): CursorPaginationResponse<SimpleProductDto> = productSearchService.getProductsByCategory(category, ordering, size, cursor)
 
     @Operation(summary = "카테고리+셀러별 상품 조회", description = "특정 카테고리와 셀러의 상품을 조회합니다")
     @GetMapping("/category/seller")

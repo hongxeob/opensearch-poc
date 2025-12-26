@@ -1,6 +1,6 @@
 package com.mediquitous.productpoc.service.event
 
-import com.mediquitous.productpoc.event.producer.ProductEventProducer
+import com.mediquitous.productpoc.service.event.producer.ProductEventProducer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.RedisTemplate

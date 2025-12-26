@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.event.topic
+package com.mediquitous.productpoc.service.event.topic
 
 /**
  * Kafka 토픽 상수 정의

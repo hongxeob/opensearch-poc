@@ -1,8 +1,8 @@
-package com.mediquitous.productpoc.event.producer
+package com.mediquitous.productpoc.service.event.producer
 
-import com.mediquitous.productpoc.event.topic.ProductTopics
-import com.mediquitous.productpoc.event.topic.SellerDeletedEvent
-import com.mediquitous.productpoc.event.topic.SellerUpdatedEvent
+import com.mediquitous.productpoc.service.event.topic.ProductTopics
+import com.mediquitous.productpoc.service.event.topic.SellerDeletedEvent
+import com.mediquitous.productpoc.service.event.topic.SellerUpdatedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.core.KafkaTemplate

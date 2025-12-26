@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.controller
+package com.mediquitous.productpoc.controller.system
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpStatus

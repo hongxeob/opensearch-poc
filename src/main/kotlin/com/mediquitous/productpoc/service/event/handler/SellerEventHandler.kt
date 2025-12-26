@@ -1,9 +1,9 @@
-package com.mediquitous.productpoc.event.handler
+package com.mediquitous.productpoc.service.event.handler
 
-import com.mediquitous.productpoc.event.topic.ProductDeletedEvent
-import com.mediquitous.productpoc.event.topic.ProductTopics
-import com.mediquitous.productpoc.event.topic.ProductUpdatedEvent
-import com.mediquitous.productpoc.service.ProductIndexService
+import com.mediquitous.productpoc.service.SellerIndexService
+import com.mediquitous.productpoc.service.event.topic.ProductTopics
+import com.mediquitous.productpoc.service.event.topic.SellerDeletedEvent
+import com.mediquitous.productpoc.service.event.topic.SellerUpdatedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.annotation.KafkaListener
@@ -16,76 +16,75 @@ import org.springframework.stereotype.Component
 private val logger = KotlinLogging.logger {}
 
 /**
- * 상품 이벤트 핸들러 (Kafka Consumer)
+ * 셀러 이벤트 핸들러 (Kafka Consumer)
  *
- * Go 서버의 event/handler/product_updated.go, product_deleted.go 구조 변환
+ * Go 서버의 event/handler/seller_updated.go 구조 변환
  */
 @Component
 @ConditionalOnProperty(prefix = "kafka", name = ["enabled"], havingValue = "true")
-class ProductEventHandler(
-    private val productIndexService: ProductIndexService,
+class SellerEventHandler(
+    private val sellerIndexService: SellerIndexService,
 ) {
     /**
-     * product.updated 이벤트 처리
+     * seller.updated 이벤트 처리
      *
-     * OpenSearch 인덱스에 상품 정보 업데이트
+     * OpenSearch 인덱스에 셀러 정보 업데이트
      */
     @KafkaListener(
-        topics = [ProductTopics.PRODUCT_UPDATED],
+        topics = [ProductTopics.SELLER_UPDATED],
         groupId = "\${kafka.group-name}",
         containerFactory = "kafkaListenerContainerFactory",
     )
-    fun handleProductUpdated(
+    fun handleSellerUpdated(
         @Payload payload: String,
         @Header(KafkaHeaders.RECEIVED_KEY, required = false) key: String?,
         @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
         @Header(KafkaHeaders.OFFSET) offset: Long,
         acknowledgment: Acknowledgment,
     ) {
-        logger.debug { "product.updated 이벤트 수신: key=$key, partition=$partition, offset=$offset" }
+        logger.debug { "seller.updated 이벤트 수신: key=$key, partition=$partition, offset=$offset" }
 
         try {
-            val event = parseProductUpdatedEvent(payload)
+            val event = parseSellerUpdatedEvent(payload)
 
-            productIndexService.updateProduct(event.id)
+            sellerIndexService.updateSeller(event.id)
 
             acknowledgment.acknowledge()
-            logger.info { "product.updated 처리 완료: productId=${event.id}" }
+            logger.info { "seller.updated 처리 완료: sellerId=${event.id}" }
         } catch (e: Exception) {
-            logger.error(e) { "product.updated 처리 실패: payload=$payload" }
-            // 재시도 정책에 따라 처리 (DLQ로 보내거나 재시도)
+            logger.error(e) { "seller.updated 처리 실패: payload=$payload" }
             throw e
         }
     }
 
     /**
-     * product.deleted 이벤트 처리
+     * seller.deleted 이벤트 처리
      *
-     * OpenSearch 인덱스에서 상품 삭제
+     * OpenSearch 인덱스에서 셀러 삭제
      */
     @KafkaListener(
-        topics = [ProductTopics.PRODUCT_DELETED],
+        topics = [ProductTopics.SELLER_DELETED],
         groupId = "\${kafka.group-name}",
         containerFactory = "kafkaListenerContainerFactory",
     )
-    fun handleProductDeleted(
+    fun handleSellerDeleted(
         @Payload payload: String,
         @Header(KafkaHeaders.RECEIVED_KEY, required = false) key: String?,
         @Header(KafkaHeaders.RECEIVED_PARTITION) partition: Int,
         @Header(KafkaHeaders.OFFSET) offset: Long,
         acknowledgment: Acknowledgment,
     ) {
-        logger.debug { "product.deleted 이벤트 수신: key=$key, partition=$partition, offset=$offset" }
+        logger.debug { "seller.deleted 이벤트 수신: key=$key, partition=$partition, offset=$offset" }
 
         try {
-            val event = parseProductDeletedEvent(payload)
+            val event = parseSellerDeletedEvent(payload)
 
-            productIndexService.deleteProduct(event.id)
+            sellerIndexService.deleteSeller(event.id)
 
             acknowledgment.acknowledge()
-            logger.info { "product.deleted 처리 완료: productId=${event.id}" }
+            logger.info { "seller.deleted 처리 완료: sellerId=${event.id}" }
         } catch (e: Exception) {
-            logger.error(e) { "product.deleted 처리 실패: payload=$payload" }
+            logger.error(e) { "seller.deleted 처리 실패: payload=$payload" }
             throw e
         }
     }
@@ -94,24 +93,23 @@ class ProductEventHandler(
     // Private Helper Methods
     // =====================================================
 
-    private fun parseProductUpdatedEvent(payload: String): ProductUpdatedEvent {
-        // 간단한 JSON 파싱 (Jackson ObjectMapper 사용 권장)
+    private fun parseSellerUpdatedEvent(payload: String): SellerUpdatedEvent {
         val idRegex = """"id"\s*:\s*(\d+)""".toRegex()
         val matchResult = idRegex.find(payload)
         val id =
             matchResult?.groupValues?.get(1)?.toLongOrNull()
-                ?: throw IllegalArgumentException("Invalid ProductUpdatedEvent payload: $payload")
+                ?: throw IllegalArgumentException("Invalid SellerUpdatedEvent payload: $payload")
 
-        return ProductUpdatedEvent(id = id)
+        return SellerUpdatedEvent(id = id)
     }
 
-    private fun parseProductDeletedEvent(payload: String): ProductDeletedEvent {
+    private fun parseSellerDeletedEvent(payload: String): SellerDeletedEvent {
         val idRegex = """"id"\s*:\s*(\d+)""".toRegex()
         val matchResult = idRegex.find(payload)
         val id =
             matchResult?.groupValues?.get(1)?.toLongOrNull()
-                ?: throw IllegalArgumentException("Invalid ProductDeletedEvent payload: $payload")
+                ?: throw IllegalArgumentException("Invalid SellerDeletedEvent payload: $payload")
 
-        return ProductDeletedEvent(id = id)
+        return SellerDeletedEvent(id = id)
     }
 }

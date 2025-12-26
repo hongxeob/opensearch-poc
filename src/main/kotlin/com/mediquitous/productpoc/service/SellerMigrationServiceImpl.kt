@@ -1,7 +1,7 @@
 package com.mediquitous.productpoc.service
 
-import com.mediquitous.productpoc.event.producer.SellerEventProducer
 import com.mediquitous.productpoc.repository.jpa.seller.SellerJpaRepository
+import com.mediquitous.productpoc.service.event.producer.SellerEventProducer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
