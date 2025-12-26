@@ -1,7 +1,6 @@
 package com.mediquitous.productpoc.repository.opensearch
 
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
-import org.opensearch.client.opensearch.core.SearchRequest
 
 /**
  * OpenSearch 리포지토리 인터페이스
@@ -36,7 +35,15 @@ interface OpenSearchRepository {
         cursor: String?,
     ): SearchResult
 
-    fun searchByQuery(build: SearchRequest): SearchResult
+    /**
+     * 상품 ID 목록으로 검색
+     */
+    fun searchByProductIds(
+        productIds: List<Long>,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult
 
     /**
      * OpenSearch 검색 결과

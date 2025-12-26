@@ -3,6 +3,7 @@
 package com.mediquitous.productpoc.repository.opensearch
 
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository.SearchResult
 import com.mediquitous.productpoc.repository.opensearch.query.ProductSearchQueryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.opensearch.client.opensearch.OpenSearchClient
@@ -24,7 +25,7 @@ class OpenSearchRepositoryImpl(
         keyword: String,
         size: Int,
         cursor: String?,
-    ): OpenSearchRepository.SearchResult {
+    ): SearchResult {
         logger.debug { "OpenSearch 키워드 검색: keyword=$keyword, size=$size" }
 
         // 쿼리 빌드
@@ -54,7 +55,7 @@ class OpenSearchRepositoryImpl(
         size: Int,
         ordering: String?,
         cursor: String?,
-    ): OpenSearchRepository.SearchResult {
+    ): SearchResult {
         logger.debug { "OpenSearch 카테고리 검색: categorySlug=$categorySlug" }
 
         val cursorValues = cursor?.let { decodeCursor(it) }
@@ -82,7 +83,7 @@ class OpenSearchRepositoryImpl(
         size: Int,
         ordering: String?,
         cursor: String?,
-    ): OpenSearchRepository.SearchResult {
+    ): SearchResult {
         logger.debug { "OpenSearch 셀러 검색: sellerSlug=$sellerSlug" }
 
         val cursorValues = cursor?.let { decodeCursor(it) }
@@ -105,8 +106,32 @@ class OpenSearchRepositoryImpl(
         return parseSearchResponse(response, size)
     }
 
-    override fun searchByQuery(build: SearchRequest): OpenSearchRepository.SearchResult {
-        TODO("Not yet implemented")
+    override fun searchByProductIds(
+        productIds: List<Long>,
+        size: Int,
+        ordering: String?,
+        cursor: String?,
+    ): SearchResult {
+        logger.debug { "OpenSearch 상품 ID 목록 검색: productIds=${productIds.size}개, size=$size" }
+
+        val cursorValues = cursor?.let { decodeCursor(it) }
+        val searchRequest =
+            ProductSearchQueryBuilder.buildProductIdsQuery(
+                productIds = productIds,
+                size = size + 1, // hasNext 판단용
+                ordering = ordering,
+                cursor = cursorValues,
+            )
+
+        val response =
+            try {
+                openSearchClient.search(searchRequest, Map::class.java)
+            } catch (e: Exception) {
+                logger.error(e) { "상품 ID 목록 검색 실패: productIds=$productIds" }
+                throw OpenSearchException("상품 ID 목록 검색 중 오류가 발생했습니다", e)
+            }
+
+        return parseSearchResponse(response, size)
     }
 
     // ========== Private Helper Functions ==========
@@ -117,7 +142,7 @@ class OpenSearchRepositoryImpl(
     private fun parseSearchResponse(
         response: SearchResponse<Map<*, *>>,
         requestedSize: Int,
-    ): OpenSearchRepository.SearchResult {
+    ): SearchResult {
         val hits = response.hits().hits()
         val totalHits = response.hits().total()?.value() ?: 0L
 
@@ -143,7 +168,7 @@ class OpenSearchRepositoryImpl(
 
         logger.debug { "검색 완료: totalHits=$totalHits, resultSize=${products.size}" }
 
-        return OpenSearchRepository.SearchResult(
+        return SearchResult(
             totalHits = totalHits,
             products = products,
             nextCursor = nextCursor,

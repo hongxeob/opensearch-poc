@@ -3,10 +3,8 @@ package com.mediquitous.productpoc.service
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository
-import com.mediquitous.productpoc.repository.opensearch.query.ProductSearchQueryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
-import java.util.Base64
 
 private val logger = KotlinLogging.logger {}
 
@@ -47,22 +45,16 @@ class ProductSearchServiceImpl(
             return CursorPaginationResponse.empty()
         }
 
-        // 2. 커서 디코딩 (search_after 값 추출)
-        val searchAfter = cursor?.let { decodeSearchAfter(it) }
-
-        // 3. OpenSearch 쿼리 생성
-        val searchRequest =
-            ProductSearchQueryBuilder.buildProductIdsQuery(
+        // 2. OpenSearch 검색 실행
+        val searchResult =
+            openSearchRepository.searchByProductIds(
                 productIds = productIds,
-                size = size + 1, // 다음 페이지 존재 여부 확인을 위해 +1
+                size = size,
                 ordering = ordering,
-                cursor = searchAfter?.map { it.toString() },
+                cursor = cursor,
             )
 
-        // 4. OpenSearch 검색 실행
-        val searchResult = openSearchRepository.searchByQuery(searchRequest)
-
-        // 5. 페이지네이션 응답 생성
+        // 3. 페이지네이션 응답 생성
         val hasNext = checkHasNext(searchResult, size)
         val results =
             if (hasNext) {
@@ -71,7 +63,6 @@ class ProductSearchServiceImpl(
                 searchResult.products
             }
 
-        // 6. 다음 커서 생성
         val nextCursor =
             if (hasNext) {
                 searchResult.nextCursor
@@ -350,41 +341,4 @@ class ProductSearchServiceImpl(
             .split(",")
             .mapNotNull { it.trim().toLongOrNull() }
             .distinct()
-
-    /**
-     * search_after 커서 디코딩
-     *
-     * OpenSearch의 search_after는 정렬 값들의 배열
-     * 예: Base64("[\"2024-01-15\", 123]") → listOf("2024-01-15", 123)
-     */
-    private fun decodeSearchAfter(cursor: String): List<Any>? =
-        try {
-            val decoded = String(Base64.getDecoder().decode(cursor))
-            // JSON 파싱 필요 (간단히 구현)
-            // TODO: Jackson ObjectMapper로 파싱
-            logger.debug { "커서 디코딩: $decoded" }
-            null // 임시로 null 반환
-        } catch (e: Exception) {
-            logger.warn(e) { "커서 디코딩 실패: $cursor" }
-            null
-        }
-
-    /**
-     * search_after 값을 커서로 인코딩
-     *
-     * @param sortValues OpenSearch sort 값
-     * @return Base64 encoded cursor
-     */
-    private fun encodeSearchAfter(sortValues: List<Any>?): String? =
-        sortValues?.let {
-            try {
-                // JSON 직렬화 필요
-                // TODO: Jackson ObjectMapper로 직렬화
-                val json = sortValues.toString() // 임시 구현
-                Base64.getEncoder().encodeToString(json.toByteArray())
-            } catch (e: Exception) {
-                logger.warn(e) { "커서 인코딩 실패" }
-                null
-            }
-        }
 }
