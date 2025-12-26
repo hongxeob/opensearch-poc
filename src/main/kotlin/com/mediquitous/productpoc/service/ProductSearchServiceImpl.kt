@@ -232,20 +232,21 @@ class ProductSearchServiceImpl(
     }
 
     // =====================================================
-
-    override fun getProductsByHomeTab(
-        tab: String,
+    // 홈 탭/랭킹/신상품
+    // =====================================================
+    override fun getProductsByBestRanking(
+        categoryId: Long?,
+        managerPart: String?,
+        sellerId: Long?,
+        period: Int,
         size: Int,
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> {
         TODO("Not yet implemented")
     }
 
-    override fun getProductsByBestRanking(
-        categoryId: Long?,
-        managerPart: String?,
-        sellerId: Long?,
-        period: Int,
+    override fun getProductsByHomeTab(
+        tab: String,
         size: Int,
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> {
@@ -264,7 +265,8 @@ class ProductSearchServiceImpl(
     }
 
     // =====================================================
-
+    // 추천
+    // =====================================================
     override fun getRecommendProducts(
         codes: String,
         size: Int,
@@ -283,7 +285,8 @@ class ProductSearchServiceImpl(
     }
 
     // =====================================================
-
+    // 고객별 조회
+    // =====================================================
     override fun getLikedProducts(
         customerId: Long,
         size: Int,
@@ -300,7 +303,8 @@ class ProductSearchServiceImpl(
     }
 
     // =====================================================
-
+    // 기타
+    // =====================================================
     override fun getProductsByRetailStore(
         name: String,
         ordering: String?,
@@ -308,22 +312,6 @@ class ProductSearchServiceImpl(
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> {
         TODO("Not yet implemented")
-    }
-
-    // =====================================================
-    // 기타
-    // =====================================================
-    // 고객별 조회
-    // =====================================================
-    // 추천
-    // =====================================================
-    // 홈 탭/랭킹/신상품
-    private fun checkHasNext(
-        searchResult: OpenSearchRepository.SearchResult,
-        size: Int,
-    ): Boolean {
-        val hasNext = searchResult.products.size > size
-        return hasNext
     }
 
     // =====================================================
@@ -341,4 +329,12 @@ class ProductSearchServiceImpl(
             .split(",")
             .mapNotNull { it.trim().toLongOrNull() }
             .distinct()
+
+    private fun checkHasNext(
+        searchResult: OpenSearchRepository.SearchResult,
+        size: Int,
+    ): Boolean {
+        val hasNext = searchResult.products.size > size
+        return hasNext
+    }
 }
