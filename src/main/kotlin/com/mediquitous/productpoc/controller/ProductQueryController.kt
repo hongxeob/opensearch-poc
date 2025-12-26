@@ -2,6 +2,7 @@ package com.mediquitous.productpoc.controller
 
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.model.vo.BestRankingPath
 import com.mediquitous.productpoc.service.ProductSearchService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -229,8 +230,20 @@ class ProductQueryController(
         @Max(100) size: Int,
         @Parameter(description = "페이지네이션 커서")
         @RequestParam(required = false) cursor: String?,
-    ): CursorPaginationResponse<SimpleProductDto> =
-        productSearchService.getProductsByBestRanking(categoryId, managerPart, sellerId, period, size, cursor)
+    ): CursorPaginationResponse<SimpleProductDto> {
+        val rankingPath =
+            buildBestRankingPath(
+                period = period,
+                categoryId = categoryId,
+                managerPart = managerPart,
+                sellerId = sellerId,
+            )
+        return productSearchService.getProductsByBestRanking(
+            rankingPath = rankingPath,
+            size = size,
+            cursor = cursor,
+        )
+    }
 
     @Operation(summary = "신상품 조회", description = "최신 출시된 상품을 조회합니다")
     @GetMapping("/newest")
@@ -330,4 +343,43 @@ class ProductQueryController(
         @Parameter(description = "페이지네이션 커서")
         @RequestParam(required = false) cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> = productSearchService.getProductsByRetailStore(name, ordering, size, cursor)
+
+    private fun buildBestRankingPath(
+        period: Int,
+        categoryId: Long?,
+        managerPart: String?,
+        sellerId: Long?,
+    ): BestRankingPath {
+        require(period > 0) { "period must be positive" }
+
+        return when {
+            categoryId != null -> {
+                BestRankingPath(
+                    path = "category_id=$categoryId&period=$period",
+                    period = period,
+                )
+            }
+
+            !managerPart.isNullOrBlank() -> {
+                BestRankingPath(
+                    path = "manager_part=$managerPart&period=$period",
+                    period = period,
+                )
+            }
+
+            sellerId != null -> {
+                BestRankingPath(
+                    path = "period=$period&seller_id=$sellerId",
+                    period = period,
+                )
+            }
+
+            else -> {
+                BestRankingPath(
+                    path = "period=$period",
+                    period = period,
+                )
+            }
+        }
+    }
 }

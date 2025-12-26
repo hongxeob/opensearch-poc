@@ -1,8 +1,8 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/zelda_product
-    username: master
-    password: password
+#  datasource:
+#    url: jdbc:postgresql://localhost:5432/zelda_product
+#    username: master
+#    password: password
 
 redis:
   enabled: false

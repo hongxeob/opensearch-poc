@@ -2,11 +2,20 @@ package com.mediquitous.productpoc.service
 
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.model.vo.BestRankingPath
+import com.mediquitous.productpoc.model.vo.RankedProduct
+import com.mediquitous.productpoc.repository.jpa.ranking.ProductRankingJpaRepository
+import com.mediquitous.productpoc.repository.jpa.ranking.RankingSpecificationJpaRepository
 import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 
 private val logger = KotlinLogging.logger {}
+
+// 랭킹 기간 상수 (Go: Days, Weekly, Monthly)
+private const val RANKING_PERIOD_DAILY = 1
+private const val RANKING_PERIOD_WEEKLY = 7
+private const val RANKING_PERIOD_MONTHLY = 30
 
 /**
  * 상품 검색 서비스 구현체
@@ -16,6 +25,8 @@ private val logger = KotlinLogging.logger {}
 @Service
 class ProductSearchServiceImpl(
     private val openSearchRepository: OpenSearchRepository,
+    private val rankingSpecificationJpaRepository: RankingSpecificationJpaRepository,
+    private val productRankingJpaRepository: ProductRankingJpaRepository,
 ) : ProductSearchService {
     // =====================================================
     // 단건 조회
@@ -255,19 +266,51 @@ class ProductSearchServiceImpl(
     }
 
     override fun getProductsByBestRanking(
-        categoryId: Long?,
-        managerPart: String?,
-        sellerId: Long?,
-        period: Int,
+        rankingInfo: BestRankingPath,
         size: Int,
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto> {
-        logger.info { "베스트 랭킹 검색: categoryId=$categoryId, period=$period, size=$size" }
+        logger.info { "베스트 랭킹 검색: path = ${rankingInfo.path}, period=${rankingInfo.period}, size=$size, cursor=$cursor" }
 
-        // TODO: PostgreSQL에서 랭킹 spec 조회 후 상품 ID 목록을 가져와서 검색
-        // 현재는 OpenSearch만으로는 구현 불가 - DB 연동 필요
-        logger.warn { "베스트 랭킹 검색은 DB 연동이 필요합니다" }
-        return CursorPaginationResponse.empty()
+        // 2. 랭킹 스펙 ID 조회
+        val specificationId = rankingSpecificationJpaRepository.findIdByPath(rankingInfo.path)
+        if (specificationId == null) {
+            logger.warn { "랭킹 스펙을 찾을 수 없습니다: path=${rankingInfo.path}" }
+            return CursorPaginationResponse.empty()
+        }
+
+        // 3. 랭킹 상품 ID 목록 조회 (pageSize + 1로 다음 페이지 여부 확인)
+        val rankedProducts = getRankedProductIds(specificationId, size, cursor)
+        if (rankedProducts.isEmpty()) {
+            logger.debug { "랭킹 상품이 없습니다: specificationId=$specificationId" }
+            return CursorPaginationResponse.empty()
+        }
+
+        // 4. 다음 커서 계산 (size + 1개를 조회했으므로)
+        val hasNext = rankedProducts.size > size
+        val nextCursor =
+            if (hasNext) {
+                val nextRank = rankedProducts[size].rank
+                encodeIntCursor(nextRank)
+            } else {
+                null
+            }
+
+        // 5. 실제 반환할 상품 ID 목록 (size 개수만큼)
+        val productIdsToSearch = rankedProducts.take(size).map { it.productId }
+
+        // 6. OpenSearch에서 상품 정보 조회
+        val searchResult = openSearchRepository.searchByProductIdsBulk(productIdsToSearch)
+
+        // 7. 원본 랭킹 순서 복원
+        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.products)
+
+        return CursorPaginationResponse(
+            count = searchResult.totalHits,
+            results = orderedProducts,
+            nextCursor = nextCursor,
+            previousCursor = null,
+        )
     }
 
     override fun getNewestProducts(
@@ -439,4 +482,78 @@ class ProductSearchServiceImpl(
             previousCursor = null,
         )
     }
+
+    // =====================================================
+    // Best Ranking Helper Methods
+    // =====================================================
+
+    private fun isValidRankingPeriod(period: Int): Boolean =
+        period == RANKING_PERIOD_DAILY || period == RANKING_PERIOD_WEEKLY || period == RANKING_PERIOD_MONTHLY
+
+    /**
+     * 랭킹 상품 ID 조회 (커서 유무에 따라 분기)
+     */
+    private fun getRankedProductIds(
+        specificationId: Long,
+        size: Int,
+        cursor: String?,
+    ): List<RankedProduct> {
+        val limit = size + 1 // 다음 페이지 여부 확인용
+        val decodedCursor = cursor?.let { decodeIntCursor(it) } ?: 0
+
+        val projections =
+            if (decodedCursor == 0) {
+                productRankingJpaRepository.findRankedProductIds(specificationId, limit)
+            } else {
+                productRankingJpaRepository.findRankedProductIdsByCursor(specificationId, decodedCursor, limit)
+            }
+
+        return projections.map { projection ->
+            RankedProduct(
+                productId = projection.getProductId(),
+                rank = projection.getRank(),
+            )
+        }
+    }
+
+    /**
+     * 원본 랭킹 순서 복원
+     *
+     * OpenSearch 검색 결과를 원본 상품 ID 순서로 재정렬
+     */
+    private fun restoreOriginalRankingOrder(
+        originalIds: List<Long>,
+        products: List<SimpleProductDto>,
+    ): List<SimpleProductDto> {
+        if (products.isEmpty()) return emptyList()
+
+        val orderMap = originalIds.withIndex().associate { (index, id) -> id to index }
+
+        return products.sortedBy { product ->
+            orderMap[product.id] ?: Int.MAX_VALUE
+        }
+    }
+
+    /**
+     * Int 커서 인코딩 (Base64)
+     */
+    private fun encodeIntCursor(value: Int): String =
+        java.util.Base64
+            .getUrlEncoder()
+            .encodeToString(value.toString().toByteArray())
+
+    /**
+     * Int 커서 디코딩 (Base64)
+     */
+    private fun decodeIntCursor(cursor: String): Int =
+        try {
+            String(
+                java.util.Base64
+                    .getUrlDecoder()
+                    .decode(cursor),
+            ).toInt()
+        } catch (e: Exception) {
+            logger.warn { "커서 디코딩 실패: $cursor" }
+            0
+        }
 }

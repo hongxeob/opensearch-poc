@@ -2,6 +2,7 @@ package com.mediquitous.productpoc.service
 
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.model.vo.BestRankingPath
 
 /**
  * 상품 검색 서비스 인터페이스
@@ -108,10 +109,7 @@ interface ProductSearchService {
     ): CursorPaginationResponse<SimpleProductDto>
 
     fun getProductsByBestRanking(
-        categoryId: Long?,
-        managerPart: String?,
-        sellerId: Long?,
-        period: Int,
+        rankingPath: BestRankingPath,
         size: Int,
         cursor: String?,
     ): CursorPaginationResponse<SimpleProductDto>

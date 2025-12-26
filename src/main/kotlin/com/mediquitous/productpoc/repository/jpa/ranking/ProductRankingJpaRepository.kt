@@ -7,6 +7,16 @@ import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 
 /**
+ * 랭킹 상품 Projection
+ *
+ * Native Query 결과를 타입 안전하게 매핑
+ */
+interface RankedProductProjection {
+    fun getProductId(): Long
+    fun getRank(): Int
+}
+
+/**
  * 상품 랭킹 JPA Repository
  *
  * Go 서비스의 상품 랭킹 조회 쿼리와 동일한 스펙 구현
@@ -35,7 +45,7 @@ interface ProductRankingJpaRepository : JpaRepository<ProductRankingEntity, Long
      */
     @Query(
         value = """
-        SELECT product_id, rank
+        SELECT product_id AS productId, rank AS rank
         FROM shopping_productranking
         WHERE specification_id = :specificationId
           AND rank > :cursor
@@ -48,7 +58,7 @@ interface ProductRankingJpaRepository : JpaRepository<ProductRankingEntity, Long
         @Param("specificationId") specificationId: Long,
         @Param("cursor") cursor: Int,
         @Param("limit") limit: Int,
-    ): List<Array<Any>>
+    ): List<RankedProductProjection>
 
     /**
      * 전체 랭킹 상품 ID 조회 (첫 페이지용)
@@ -68,7 +78,7 @@ interface ProductRankingJpaRepository : JpaRepository<ProductRankingEntity, Long
      */
     @Query(
         value = """
-        SELECT product_id, rank
+        SELECT product_id AS productId, rank AS rank
         FROM shopping_productranking
         WHERE specification_id = :specificationId
         ORDER BY rank ASC
@@ -79,5 +89,5 @@ interface ProductRankingJpaRepository : JpaRepository<ProductRankingEntity, Long
     fun findRankedProductIds(
         @Param("specificationId") specificationId: Long,
         @Param("limit") limit: Int,
-    ): List<Array<Any>>
+    ): List<RankedProductProjection>
 }
