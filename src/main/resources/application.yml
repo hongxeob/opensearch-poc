@@ -26,21 +26,80 @@ spring:
         show_sql: false
     open-in-view: false
 
-  # Kafka 설정 (자동 시작 비활성화)
-  kafka:
-    bootstrap-servers: localhost:9092
-  
-  # Kafka 자동 설정 비활성화
+  # Spring Kafka 자동 설정 비활성화 (커스텀 설정 사용)
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
 
-  # Redis 설정 (자동 시작 비활성화)
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      timeout: 3000ms
+# =====================================================
+# Redis 설정
+# Go 서버의 redis/config.go 구조와 동일
+# =====================================================
+redis:
+  enabled: false  # 로컬 개발 시 false, 운영 환경에서 true
+  read:
+    host: localhost
+    port: 6379
+    password: ""
+    database: 0
+    pool:
+      size: 10
+      min-idle: 2
+      max-active: 10
+    timeout:
+      dial: 5s
+      read: 3s
+      write: 3s
+    max-retries: 3
+    enable-tls: false
+  write:
+    host: localhost
+    port: 6379
+    password: ""
+    database: 0
+    pool:
+      size: 10
+      min-idle: 2
+      max-active: 10
+    timeout:
+      dial: 5s
+      read: 3s
+      write: 3s
+    max-retries: 3
+    enable-tls: false
+
+# =====================================================
+# Kafka 설정
+# Go 서버의 kafka/config.go 구조와 동일
+# =====================================================
+kafka:
+  enabled: false  # 로컬 개발 시 false, 운영 환경에서 true
+  brokers:
+    - localhost:9092
+  group-name: product-search-service
+  topic-prefix: ""
+  security:
+    protocol: PLAINTEXT  # PLAINTEXT, TLS, SASL_SCRAM, SASL_PLAINTEXT, SASL_IAM
+    mechanism: SCRAM-SHA-512
+    username: ""
+    password: ""
+    aws-region: ""
+  producer:
+    max-retry: 3
+    retry-backoff: 100ms
+    acks: all
+    batch-size: 16384
+    linger-ms: 5
+    buffer-memory: 33554432
+  consumer:
+    max-wait-time: 500ms
+    retry-backoff: 100ms
+    session-timeout: 30s
+    heartbeat-interval: 10s
+    semaphore-limit: 10
+    auto-offset-reset: earliest
+    enable-auto-commit: false
 
 # OpenSearch 설정
 opensearch:
