@@ -26,17 +26,27 @@ interface SellerJpaRepository : JpaRepository<SellerEntity, Long> {
     /**
      * ID 이후의 셀러 ID 목록 조회 (커서 페이징)
      *
-     * SQL: GetSellerIDsByAfterID
+     * Go 서버의 GetSellerIDsByAfterID 쿼리와 동일
+     *
+     * SQL:
+     * ```sql
+     * SELECT id FROM shopping_seller
+     * WHERE id > :afterId
+     * ORDER BY id
+     * LIMIT :limit
+     * ```
      *
      * @param afterId 커서 (이 ID 이후부터 조회)
      * @param limit 조회 개수
      */
     @Query(
-        """
-        SELECT s.id FROM SellerEntity s
-        WHERE s.id > :afterId
-        ORDER BY s.id
+        value = """
+        SELECT id FROM shopping_seller
+        WHERE id > :afterId
+        ORDER BY id
+        LIMIT :limit
     """,
+        nativeQuery = true,
     )
     fun findSellerIdsAfter(
         @Param("afterId") afterId: Long,

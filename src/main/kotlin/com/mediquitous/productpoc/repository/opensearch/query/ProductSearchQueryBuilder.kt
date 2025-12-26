@@ -3,15 +3,23 @@ package com.mediquitous.productpoc.repository.opensearch.query
 import org.opensearch.client.opensearch._types.FieldValue
 import org.opensearch.client.opensearch._types.SortOrder
 import org.opensearch.client.opensearch._types.mapping.FieldType
-import org.opensearch.client.opensearch._types.query_dsl.*
+import org.opensearch.client.opensearch._types.query_dsl.Query
+import org.opensearch.client.opensearch._types.query_dsl.TextQueryType
 import org.opensearch.client.opensearch.core.SearchRequest
 
 /**
  * 상품 검색 쿼리 빌더 (유틸리티)
+ *
+ * 지원하는 검색 유형:
+ * - 키워드 검색 (buildKeywordSearchQuery)
+ * - 카테고리 슬러그 검색 (buildCategorySlugQuery)
+ * - 셀러 슬러그 검색 (buildSellerSlugQuery)
+ * - 상품 ID 목록 검색 (buildProductIdsQuery)
  */
 object ProductSearchQueryBuilder {
     private const val MAX_KEYWORD_LENGTH = 120
     private const val PRODUCTS_INDEX = "zelda-products"
+    private const val DEFAULT_ORDERING = "-released"
 
     /**
      * 키워드 검색 쿼리 생성
@@ -103,6 +111,53 @@ object ProductSearchQueryBuilder {
             }.size(size)
             .apply {
                 addSorting(ordering, cursor)
+            }.build()
+
+    /**
+     * 상품 ID 목록 검색 쿼리
+     *
+     * Go 서버의 by_ids_with_cursor.go 로직을 Kotlin으로 변환
+     *
+     * 기본 쿼리 구조:
+     * ```json
+     * {
+     *   "query": {
+     *     "bool": {
+     *       "filter": [
+     *         { "terms": { "id": [1,2,3] } },
+     *         { "exists": { "field": "display" } },
+     *         { "exists": { "field": "selling" } }
+     *       ],
+     *       "must_not": [
+     *         { "exists": { "field": "deleted" } }
+     *       ]
+     *     }
+     *   },
+     *   "size": 21,
+     *   "sort": [...],
+     *   "search_after": [...]
+     * }
+     * ```
+     */
+    fun buildProductIdsQuery(
+        productIds: List<Long>,
+        size: Int,
+        ordering: String? = null,
+        cursor: List<String>? = null,
+    ): SearchRequest =
+        SearchRequest
+            .Builder()
+            .index(PRODUCTS_INDEX)
+            .query { q ->
+                q.bool { b ->
+                    b
+                        .filter(buildProductIdsFilter(productIds))
+                        .filter(buildDisplayAndSellingFilters())
+                        .mustNot { mn -> mn.exists { e -> e.field("deleted") } }
+                }
+            }.size(size)
+            .apply {
+                addSorting(ordering ?: DEFAULT_ORDERING, cursor)
             }.build()
 
     // ========== Private Helper Functions ==========
@@ -266,6 +321,29 @@ object ProductSearchQueryBuilder {
                 .bool { b ->
                     b.mustNot { mn -> mn.exists { e -> e.field("deleted") } }
                 }.build(),
+        )
+
+    /**
+     * 상품 ID 목록 필터 (terms query)
+     */
+    private fun buildProductIdsFilter(productIds: List<Long>): Query =
+        Query
+            .Builder()
+            .terms { t ->
+                t
+                    .field("id")
+                    .terms { tf ->
+                        tf.value(productIds.map { FieldValue.of(it) })
+                    }
+            }.build()
+
+    /**
+     * display & selling 필드 존재 필터
+     */
+    private fun buildDisplayAndSellingFilters(): List<Query> =
+        listOf(
+            Query.Builder().exists { e -> e.field("display") }.build(),
+            Query.Builder().exists { e -> e.field("selling") }.build(),
         )
 
     /**

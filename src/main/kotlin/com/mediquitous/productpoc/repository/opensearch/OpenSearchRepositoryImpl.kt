@@ -6,6 +6,7 @@ import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.repository.opensearch.query.ProductSearchQueryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.opensearch.client.opensearch.OpenSearchClient
+import org.opensearch.client.opensearch.core.SearchRequest
 import org.opensearch.client.opensearch.core.SearchResponse
 import org.springframework.stereotype.Repository
 import java.util.*
@@ -104,6 +105,10 @@ class OpenSearchRepositoryImpl(
         return parseSearchResponse(response, size)
     }
 
+    override fun searchByQuery(build: SearchRequest): OpenSearchRepository.SearchResult {
+        TODO("Not yet implemented")
+    }
+
     // ========== Private Helper Functions ==========
 
     /**
@@ -171,49 +176,55 @@ class OpenSearchRepositoryImpl(
 
     /**
      * Base64로 커서 인코딩
-     * 
+     *
      * ⚠️ 중요: FieldValue 객체에서 실제 값을 추출해야 함
      */
     private fun encodeCursor(sortValues: List<*>): String {
-        val actualValues = sortValues.map { value ->
-            when (value) {
-                is org.opensearch.client.opensearch._types.FieldValue -> {
-                    // FieldValue 객체에서 실제 값 추출
-                    when {
-                        value.isDouble -> value.doubleValue()
-                        value.isLong -> value.longValue()
-                        value.isBoolean -> value.booleanValue()
-                        value.isString -> value.stringValue()
-                        else -> value.toString()
+        val actualValues =
+            sortValues.map { value ->
+                when (value) {
+                    is org.opensearch.client.opensearch._types.FieldValue -> {
+                        // FieldValue 객체에서 실제 값 추출
+                        when {
+                            value.isDouble -> value.doubleValue()
+                            value.isLong -> value.longValue()
+                            value.isBoolean -> value.booleanValue()
+                            value.isString -> value.stringValue()
+                            else -> value.toString()
+                        }
+                    }
+
+                    else -> {
+                        value
                     }
                 }
-                else -> value
             }
-        }
-        
-        val json = actualValues.joinToString(",", "[", "]") { 
-            when (it) {
-                is String -> "\"$it\""
-                else -> it.toString()
+
+        val json =
+            actualValues.joinToString(",", "[", "]") {
+                when (it) {
+                    is String -> "\"$it\""
+                    else -> it.toString()
+                }
             }
-        }
-        
+
         logger.trace { "커서 인코딩: actualValues=$actualValues, json=$json" }
         return Base64.getEncoder().encodeToString(json.toByteArray())
     }
 
     /**
      * Base64 커서 디코딩
-     * 
+     *
      * JSON 배열을 파싱하여 String 리스트로 반환
      */
-    private fun decodeCursor(cursor: String): List<String>? {
-        return try {
+    private fun decodeCursor(cursor: String): List<String>? =
+        try {
             val json = String(Base64.getDecoder().decode(cursor))
             logger.trace { "커서 디코딩: json=$json" }
-            
+
             // 간단한 JSON 배열 파싱
-            json.trim('[', ']')
+            json
+                .trim('[', ']')
                 .split(",")
                 .map { it.trim().trim('"') }
                 .filter { it.isNotBlank() }
@@ -221,7 +232,6 @@ class OpenSearchRepositoryImpl(
             logger.warn(e) { "커서 디코딩 실패: cursor=$cursor" }
             null
         }
-    }
 }
 
 /**

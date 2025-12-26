@@ -52,12 +52,14 @@ interface ProductJpaRepository : JpaRepository<ProductEntity, Long> {
      * @param limit 조회 개수
      */
     @Query(
-        """
-        SELECT p.id FROM ProductEntity p
-        WHERE p.sellerId = :sellerId
+        value = """
+        SELECT p.id FROM shopping_product p
+        WHERE p.seller_id = :sellerId
         AND p.id > :afterId
         ORDER BY p.id
+        LIMIT :limit
     """,
+        nativeQuery = true,
     )
     fun findProductIdsBySellerId(
         @Param("sellerId") sellerId: Long,
@@ -68,17 +70,27 @@ interface ProductJpaRepository : JpaRepository<ProductEntity, Long> {
     /**
      * ID 이후의 상품 ID 목록 조회 (커서 페이징)
      *
-     * SQL: GetProductIDsByAfterID
+     * Go 서버의 GetProductIDsByAfterID 쿼리와 동일
+     *
+     * SQL:
+     * ```sql
+     * SELECT id FROM shopping_product
+     * WHERE id > :afterId
+     * ORDER BY id
+     * LIMIT :limit
+     * ```
      *
      * @param afterId 커서 (이 ID 이후부터 조회)
      * @param limit 조회 개수
      */
     @Query(
-        """
-        SELECT p.id FROM ProductEntity p
-        WHERE p.id > :afterId
-        ORDER BY p.id
+        value = """
+        SELECT id FROM shopping_product
+        WHERE id > :afterId
+        ORDER BY id
+        LIMIT :limit
     """,
+        nativeQuery = true,
     )
     fun findProductIdsAfter(
         @Param("afterId") afterId: Long,
