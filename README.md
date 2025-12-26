@@ -267,7 +267,8 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 - [x] OpenSearchRepository 구현
 - [x] JPA 엔티티 및 리포지토리 구현
 - [x] Kafka 이벤트 버퍼 구현
-- [ ] 베스트 랭킹 DB 연동 (PostgreSQL 랭킹 스펙 조회)
+- [ ] CDC 이벤트 구현
+- [x] 베스트 랭킹 DB 연동 (PostgreSQL 랭킹 스펙 조회)
 - [ ] 좋아요/최근 본 상품 DB 연동
 - [ ] 테스트 코드 작성 (Kotest)
 - [ ] Docker Compose 설정
