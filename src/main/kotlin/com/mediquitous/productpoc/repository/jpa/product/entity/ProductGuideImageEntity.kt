@@ -20,25 +20,17 @@ data class ProductGuideImageEntity(
     @Id
     @Column(name = "id")
     val id: Long? = null,
-    // URL
-    @Column(name = "url", length = 2000)
-    val url: String? = null,
-    // PC용 URL
-    @Column(name = "pc_url", length = 2000)
-    val pcUrl: String? = null,
-    // 모바일용 URL
-    @Column(name = "mobile_url", length = 2000)
-    val mobileUrl: String? = null,
-    // 가이드 이미지 타입
-    @Column(name = "type", length = 50)
-    val type: String? = null,
+    // 표시명 (어드민 내 이미지 대신 표시될 이름)
+    @Column(name = "name", length = 200)
+    val name: String? = null,
+    // 가이드 이미지 ID (shopping_attachment FK)
+    @Column(name = "image_id")
+    val imageId: Long? = null,
     // 날짜 정보
-    @Column(name = "created")
+    @Column(name = "created", nullable = false)
     val created: OffsetDateTime? = null,
-    @Column(name = "updated")
+    @Column(name = "updated", nullable = false)
     val updated: OffsetDateTime? = null,
-    @Column(name = "deleted")
-    val deleted: OffsetDateTime? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -48,5 +40,5 @@ data class ProductGuideImageEntity(
 
     override fun hashCode(): Int = id?.hashCode() ?: 0
 
-    override fun toString(): String = "ProductGuideImageEntity(id=$id, type=$type)"
+    override fun toString(): String = "ProductGuideImageEntity(id=$id, name=$name, imageId=$imageId)"
 }
