@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.migration
 
 /**
  * 셀러 마이그레이션 서비스

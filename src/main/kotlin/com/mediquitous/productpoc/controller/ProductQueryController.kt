@@ -3,7 +3,7 @@ package com.mediquitous.productpoc.controller
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.model.vo.BestRankingPath
-import com.mediquitous.productpoc.service.ProductSearchService
+import com.mediquitous.productpoc.service.search.ProductSearchService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag

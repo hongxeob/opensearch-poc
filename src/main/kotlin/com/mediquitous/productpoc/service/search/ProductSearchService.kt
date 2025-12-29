@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.search
 
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto

@@ -1,9 +1,9 @@
 package com.mediquitous.productpoc.service.event.handler
 
-import com.mediquitous.productpoc.service.SellerIndexService
 import com.mediquitous.productpoc.service.event.topic.ProductTopics
 import com.mediquitous.productpoc.service.event.topic.SellerDeletedEvent
 import com.mediquitous.productpoc.service.event.topic.SellerUpdatedEvent
+import com.mediquitous.productpoc.service.index.SellerIndexService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.annotation.KafkaListener

@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.search
 
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
@@ -13,6 +13,7 @@ import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import java.util.*
 
 private val logger = KotlinLogging.logger {}
 
@@ -594,7 +595,7 @@ class ProductSearchServiceImpl(
      * Int 커서 인코딩 (Base64)
      */
     private fun encodeIntCursor(value: Int): String =
-        java.util.Base64
+        Base64
             .getUrlEncoder()
             .encodeToString(value.toString().toByteArray())
 
@@ -604,7 +605,7 @@ class ProductSearchServiceImpl(
     private fun decodeIntCursor(cursor: String): Int =
         try {
             String(
-                java.util.Base64
+                Base64
                     .getUrlDecoder()
                     .decode(cursor),
             ).toInt()
@@ -648,7 +649,7 @@ class ProductSearchServiceImpl(
      * Long 커서 인코딩 (Base64)
      */
     private fun encodeLongCursor(value: Long): String =
-        java.util.Base64
+        Base64
             .getUrlEncoder()
             .encodeToString(value.toString().toByteArray())
 
@@ -658,7 +659,7 @@ class ProductSearchServiceImpl(
     private fun decodeLongCursor(cursor: String): Long? =
         try {
             String(
-                java.util.Base64
+                Base64
                     .getUrlDecoder()
                     .decode(cursor),
             ).toLong()

@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.index
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service

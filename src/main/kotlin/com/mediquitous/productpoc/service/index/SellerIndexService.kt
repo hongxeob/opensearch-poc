@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.index
 
 /**
  * 셀러 인덱스 서비스 인터페이스

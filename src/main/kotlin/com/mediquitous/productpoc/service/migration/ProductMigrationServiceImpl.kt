@@ -1,4 +1,4 @@
-package com.mediquitous.productpoc.service
+package com.mediquitous.productpoc.service.migration
 
 import com.mediquitous.productpoc.repository.jpa.product.ProductJpaRepository
 import com.mediquitous.productpoc.service.event.ProductEventBuffer
