@@ -1,6 +1,13 @@
 package com.mediquitous.productpoc.service.index
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.mediquitous.productpoc.service.index.chain.ProductIndexChainAssembler
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
+import org.opensearch.client.opensearch.OpenSearchClient
+import org.opensearch.client.opensearch.core.DeleteRequest
+import org.opensearch.client.opensearch.core.IndexRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 private val logger = KotlinLogging.logger {}
@@ -12,25 +19,41 @@ private val logger = KotlinLogging.logger {}
  */
 @Service
 class ProductIndexServiceImpl(
-    // TODO: OpenSearch 클라이언트 및 JPA Repository 주입
-    // private val openSearchClient: OpenSearchClient,
-    // private val productRepository: ProductRepository,
+    private val chainAssembler: ProductIndexChainAssembler,
+    private val openSearchClient: OpenSearchClient,
+    private val objectMapper: ObjectMapper,
+    @Value("\${opensearch.index.products.write:products}")
+    private val writeIndex: String,
 ) : ProductIndexService {
     override fun updateProduct(productId: Long) {
         logger.info { "상품 인덱스 업데이트: productId=$productId" }
 
         try {
-            // 1. PostgreSQL에서 상품 정보 조회
-            // val product = productRepository.findById(productId)
-            //     .orElseThrow { EntityNotFoundException("Product not found: $productId") }
+            // 1. 체인을 통해 상품 문서 조립
+            val document =
+                runBlocking {
+                    chainAssembler.buildProductDocument(productId)
+                }
 
-            // 2. 상품 정보를 OpenSearch 문서로 변환
-            // val document = convertToDocument(product)
+            // 2. 문서가 null이면 삭제 대상
+            if (document == null) {
+                logger.info { "삭제 대상 상품: productId=$productId" }
+                deleteProduct(productId)
+                return
+            }
 
             // 3. OpenSearch에 인덱싱
-            // openSearchClient.index(...)
+            val request =
+                IndexRequest
+                    .Builder<Any>()
+                    .index(writeIndex)
+                    .id(productId.toString())
+                    .document(document)
+                    .build()
 
-            logger.info { "상품 인덱스 업데이트 완료: productId=$productId" }
+            val response = openSearchClient.index(request)
+
+            logger.info { "상품 인덱스 업데이트 완료: productId=$productId, result=${response.result()}" }
         } catch (e: Exception) {
             logger.error(e) { "상품 인덱스 업데이트 실패: productId=$productId" }
             throw e
@@ -41,10 +64,20 @@ class ProductIndexServiceImpl(
         logger.info { "상품 인덱스 삭제: productId=$productId" }
 
         try {
-            // OpenSearch에서 문서 삭제
-            // openSearchClient.delete(...)
+            val request =
+                DeleteRequest
+                    .Builder()
+                    .index(writeIndex)
+                    .id(productId.toString())
+                    .build()
 
-            logger.info { "상품 인덱스 삭제 완료: productId=$productId" }
+            val response = openSearchClient.delete(request)
+
+            if (response.result().name == "NOT_FOUND") {
+                logger.warn { "삭제할 상품이 인덱스에 없음: productId=$productId" }
+            } else {
+                logger.info { "상품 인덱스 삭제 완료: productId=$productId, result=${response.result()}" }
+            }
         } catch (e: Exception) {
             logger.error(e) { "상품 인덱스 삭제 실패: productId=$productId" }
             throw e
@@ -60,11 +93,15 @@ class ProductIndexServiceImpl(
         }
 
         try {
-            // 1. PostgreSQL에서 상품 목록 조회
-            // val products = productRepository.findAllById(productIds)
-
-            // 2. OpenSearch Bulk API로 일괄 인덱싱
-            // openSearchClient.bulk(...)
+            // 개별 업데이트 (추후 Bulk API로 최적화 가능)
+            productIds.forEach { productId ->
+                try {
+                    updateProduct(productId)
+                } catch (e: Exception) {
+                    logger.error(e) { "상품 인덱스 업데이트 실패 (개별): productId=$productId" }
+                    // 개별 실패 시 계속 진행
+                }
+            }
 
             logger.info { "상품 일괄 인덱스 업데이트 완료: ${productIds.size}개" }
         } catch (e: Exception) {
