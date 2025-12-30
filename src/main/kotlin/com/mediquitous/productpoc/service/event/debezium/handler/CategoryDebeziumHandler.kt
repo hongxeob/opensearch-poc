@@ -3,6 +3,7 @@ package com.mediquitous.productpoc.service.event.debezium.handler
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.mediquitous.productpoc.repository.jpa.product.ProductCategorySetJpaRepository
+import com.mediquitous.productpoc.service.category.CategoryService
 import com.mediquitous.productpoc.service.event.ProductEventBuffer
 import com.mediquitous.productpoc.service.event.debezium.CategoryPayload
 import com.mediquitous.productpoc.service.event.debezium.ChangeEvent
@@ -26,7 +27,7 @@ private const val PAGE_SIZE = 1000
  * Go 서버의 internal/event/handler/debezium/category_handler.go 변환
  *
  * Category 변경 시:
- * 1. 카테고리 캐시 갱신 (TODO: CategoryService 구현 시 추가)
+ * 1. 카테고리 캐시 갱신
  * 2. 해당 카테고리에 속한 모든 상품 ID를 버퍼에 추가 (커서 페이징)
  */
 @Component
@@ -35,6 +36,7 @@ class CategoryDebeziumHandler(
     private val objectMapper: ObjectMapper,
     private val productEventBuffer: ProductEventBuffer,
     private val productCategorySetJpaRepository: ProductCategorySetJpaRepository,
+    private val categoryService: CategoryService,
 ) {
     @KafkaListener(
         topics = [DebeziumTopics.CATEGORY],
@@ -57,8 +59,8 @@ class CategoryDebeziumHandler(
                 )
             val record = event.record()
 
-            // TODO: CategoryService.loadCache() 호출 (카테고리 캐시 갱신)
-            // categoryService.loadCache()
+            // 1. 카테고리 캐시 갱신
+            categoryService.loadCache()
 
             // 해당 카테고리에 속한 모든 상품 ID를 버퍼에 추가 (커서 페이징)
             var afterProductId = 0L
