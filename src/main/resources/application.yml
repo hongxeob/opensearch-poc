@@ -20,6 +20,8 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     properties:
       hibernate:
         format_sql: true
@@ -36,7 +38,6 @@ spring:
 # Redis 설정
 # =====================================================
 redis:
-  enabled: ${REDIS_ENABLED:false}
   read:
     host: ${REDIS_READ_HOST:localhost}
     port: ${REDIS_READ_PORT:6379}
@@ -72,7 +73,6 @@ redis:
 # Kafka 설정
 # =====================================================
 kafka:
-  enabled: ${KAFKA_ENABLED:false}
   brokers: ${KAFKA_BROKERS:localhost:9092}
   group-name: ${KAFKA_GROUP_NAME:zelda-product-kotlin}
   topic-prefix: ""
