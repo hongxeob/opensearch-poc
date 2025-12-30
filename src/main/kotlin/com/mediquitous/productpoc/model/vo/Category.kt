@@ -26,7 +26,7 @@ data class Category(
      * 자식이 있으면 isLeaf = false, 없으면 isLeaf = true
      * 각 자식의 parent를 현재 카테고리로 설정
      */
-    fun setChildren(children: List<Category>) {
+    fun attachChildren(children: List<Category>) {
         if (children.isEmpty()) {
             this.isLeaf = true
             this.children = emptyList()

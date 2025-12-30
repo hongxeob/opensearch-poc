@@ -46,7 +46,8 @@ data class BenefitEntity(
     @Column(name = "is_pinned")
     val isPinned: Boolean? = null,
     // 1P 적용 여부
-    @Column(name = "apply_1P")
+//    @Column(name = "apply_1P")
+    @Column(name = "\"apply_1P\"")
     val apply1P: Boolean? = null,
     // 상품별 고정 할인 여부
     @Column(name = "is_fixed_discount_by_product")

@@ -2,12 +2,11 @@
 
 package com.mediquitous.productpoc.repository.opensearch
 
-import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.model.document.ProductDocument
 import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository.SearchResult
 import com.mediquitous.productpoc.repository.opensearch.query.ProductSearchQueryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.opensearch.client.opensearch.OpenSearchClient
-import org.opensearch.client.opensearch.core.SearchRequest
 import org.opensearch.client.opensearch.core.SearchResponse
 import org.springframework.stereotype.Repository
 import java.util.*
@@ -396,11 +395,11 @@ class OpenSearchRepositoryImpl(
         val hits = response.hits().hits()
         val totalHits = response.hits().total()?.value() ?: 0L
 
-        // Map -> SimpleProductDto 변환
-        val products =
+        // Map -> ProductDocument 변환
+        val documents =
             hits.mapNotNull { hit ->
                 val source = hit.source() ?: return@mapNotNull null
-                convertToSimpleProductDto(source)
+                convertToProductDocument(source)
             }
 
         // 다음 커서 생성
@@ -416,38 +415,223 @@ class OpenSearchRepositoryImpl(
                 null
             }
 
-        logger.debug { "검색 완료: totalHits=$totalHits, resultSize=${products.size}" }
+        logger.debug { "검색 완료: totalHits=$totalHits, resultSize=${documents.size}" }
 
         return SearchResult(
             totalHits = totalHits,
-            products = products,
+            documents = documents,
             nextCursor = nextCursor,
         )
     }
 
     /**
-     * OpenSearch 문서(Map)를 SimpleProductDto로 변환
+     * OpenSearch 문서(Map)를 ProductDocument로 변환
      */
-    private fun convertToSimpleProductDto(source: Map<*, *>): SimpleProductDto {
-        val seller = source["seller"] as? Map<*, *> ?: emptyMap<String, Any>()
+    @Suppress("UNCHECKED_CAST")
+    private fun convertToProductDocument(source: Map<*, *>): ProductDocument {
+        val seller = source["seller"] as? Map<*, *>
+        val bestOrder = source["best_order"] as? Map<*, *>
+        val image = source["image"] as? Map<*, *>
+        val guideImage = source["guide_image"] as? Map<*, *>
 
-        return SimpleProductDto(
+        return ProductDocument(
             id = (source["id"] as? Number)?.toLong() ?: 0L,
-            code = source["code"] as? String ?: "",
-            name = source["name"] as? String ?: "",
-            sellerId = (seller["id"] as? Number)?.toLong() ?: 0L,
-            sellerName = seller["name"] as? String ?: "",
-            sellerSlug = seller["slug"] as? String ?: "",
-            price = (source["price"] as? Number)?.toLong() ?: 0L,
-            discountPrice = (source["discount_price"] as? Number)?.toLong(),
-            discountRate = (source["discount_rate"] as? Number)?.toInt(),
-            inStock = source["in_stock"] as? Boolean ?: false,
-            thumbnailUrl = source["thumbnail_url"] as? String,
-            likeCount = (source["like_count"] as? Number)?.toLong() ?: 0L,
-            reviewCount = (source["review_count"] as? Number)?.toLong() ?: 0L,
-            reviewScore = (source["review_score"] as? Number)?.toDouble(),
+            code = source["code"] as? String,
+            customCode = source["custom_code"] as? String,
+            slug = source["slug"] as? String,
+            name = source["name"] as? String,
+            englishName = source["english_name"] as? String,
+            internalName = source["internal_name"] as? String,
+            modelName = source["model_name"] as? String,
+            description = source["description"] as? String,
+            title = source["title"] as? String,
+            label = (source["label"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            express = source["express"] as? Boolean ?: false,
+            annotation = source["annotation"] as? String,
+            brandId = (source["brand_id"] as? Number)?.toLong(),
+            trendId = (source["trend_id"] as? Number)?.toLong(),
+            image = image?.let { parseAttachmentDocument(it) },
+            images = (source["images"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            guideImage = guideImage?.let { parseGuideImageDocument(it) },
+            info = source["info"],
+            sizeInfo = source["size_info"] as? String,
+            price = (source["price"] as? Number)?.toDouble() ?: 0.0,
+            material = source["material"] as? String,
+            clothFabric = source["cloth_fabric"] as? String,
+            weight = (source["weight"] as? Number)?.toDouble(),
+            season = source["season"] as? String,
+            originId = (source["origin_id"] as? Number)?.toLong(),
+            manufacturerId = (source["manufacturer_id"] as? Number)?.toLong(),
+            optionType = source["option_type"] as? String ?: "",
+            memberOnly = source["member_only"] as? Boolean ?: false,
+            quantityLimitType = source["quantity_limit_type"] as? String ?: "",
+            quantityLimit = (source["quantity_limit"] as? Number)?.toInt(),
+            repurchasable = source["repurchasable"] as? Boolean ?: false,
+            display = parseInstant(source["display"]),
+            selling = parseInstant(source["selling"]),
+            isSelling = source["is_selling"] as? Boolean ?: false,
+            released = parseInstant(source["released"]),
+            deleted = parseInstant(source["deleted"]),
+            bestOrder = bestOrder?.let { parseBestOrderDocument(it) },
+            seller = seller?.let { parseSellerDocument(it) },
+            options = parseOptionDocuments(source["options"] as? List<*>),
+            variants = parseVariantDocuments(source["variants"] as? List<*>),
+            stock = parseStockDocuments(source["stock"] as? List<*>),
+            isOriginal = source["is_original"] as? Boolean ?: false,
+            hasShoeCategory = source["has_shoe_category"] as? Boolean ?: false,
+            categories = parseCategoryDocuments(source["categories"] as? List<*>),
+            displayGroup = parseDisplayGroupDocuments(source["display_group"] as? List<*>),
+            relatedProductIds = (source["related_product_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList(),
         )
     }
+
+    private fun parseInstant(value: Any?): java.time.Instant? =
+        when (value) {
+            is String -> try { java.time.Instant.parse(value) } catch (e: Exception) { null }
+            is Number -> java.time.Instant.ofEpochMilli(value.toLong())
+            else -> null
+        }
+
+    private fun parseAttachmentDocument(map: Map<*, *>): com.mediquitous.productpoc.model.document.AttachmentDocument =
+        com.mediquitous.productpoc.model.document.AttachmentDocument(
+            id = (map["id"] as? Number)?.toLong() ?: 0L,
+            mimeType = map["mime_type"] as? String,
+            file = map["file"] as? String,
+            seq = (map["seq"] as? Number)?.toInt(),
+        )
+
+    private fun parseGuideImageDocument(map: Map<*, *>): com.mediquitous.productpoc.model.document.GuideImageDocument {
+        val imageMap = map["image"] as? Map<*, *>
+        return com.mediquitous.productpoc.model.document.GuideImageDocument(
+            id = (map["id"] as? Number)?.toLong() ?: 0L,
+            name = map["name"] as? String,
+            image = imageMap?.let { parseAttachmentDocument(it) },
+        )
+    }
+
+    private fun parseBestOrderDocument(map: Map<*, *>): com.mediquitous.productpoc.model.document.BestOrderDocument =
+        com.mediquitous.productpoc.model.document.BestOrderDocument(
+            orderCount = (map["order_count"] as? Number)?.toInt() ?: 0,
+            likeCount = (map["like_count"] as? Number)?.toInt() ?: 0,
+            cartCount = (map["cart_count"] as? Number)?.toInt() ?: 0,
+            viewCount = (map["view_count"] as? Number)?.toInt() ?: 0,
+            reviewAverage = (map["review_average"] as? Number)?.toDouble(),
+            reviewCount = (map["review_count"] as? Number)?.toInt() ?: 0,
+            totalLikeCount = (map["total_like_count"] as? Number)?.toInt() ?: 0,
+            salesAmount = (map["sales_amount"] as? Number)?.toInt() ?: 0,
+            discountedPrice = (map["discounted_price"] as? Number)?.toDouble() ?: 0.0,
+        )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseSellerDocument(map: Map<*, *>): com.mediquitous.productpoc.model.document.SellerDocument {
+        val profileImage = map["profile_image"] as? Map<*, *>
+        return com.mediquitous.productpoc.model.document.SellerDocument(
+            id = (map["id"] as? Number)?.toLong() ?: 0L,
+            name = (map["name"] as? String) ?: "",
+            type = (map["type"] as? String) ?: "",
+            brandName = (map["brand_name"] as? String) ?: "",
+            influencerName = (map["influencer_name"] as? String) ?: "",
+            slug = map["slug"] as? String,
+            segment = map["segment"] as? String,
+            code = map["code"] as? String,
+            profileImage = profileImage?.let { parseAttachmentDocument(it) },
+            instagram = map["instagram"] as? String,
+            tiktok = map["tiktok"] as? String,
+            status = (map["status"] as? String) ?: "",
+            isOfficialBrand = map["is_official_brand"] as? Boolean ?: false,
+            styleTagsJp = (map["style_tags_jp"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            extraTags = (map["extra_tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            totalLikeCount = (map["total_like_count"] as? Number)?.toLong(),
+            openAt = parseInstant(map["open_at"]),
+            display = map["display"] as? Boolean ?: false,
+            newProductBegin = parseInstant(map["new_product_begin"]),
+            newProductEnd = parseInstant(map["new_product_end"]),
+            targetGender = (map["target_gender"] as? String) ?: "",
+            keywords = map["keywords"] as? String,
+            keywordArray = (map["keyword_array"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseOptionDocuments(list: List<*>?): List<com.mediquitous.productpoc.model.document.OptionDocument> =
+        list?.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            com.mediquitous.productpoc.model.document.OptionDocument(
+                id = (map["id"] as? Number)?.toLong() ?: 0L,
+                name = map["name"] as? String,
+                value = map["value"] as? String,
+                hexcode = map["hexcode"] as? String,
+                searchName = map["search_name"] as? String,
+                model = map["model"] as? Boolean,
+                nameSeq = (map["name_seq"] as? Number)?.toInt(),
+                valueSeq = (map["value_seq"] as? Number)?.toInt(),
+            )
+        } ?: emptyList()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseVariantDocuments(list: List<*>?): List<com.mediquitous.productpoc.model.document.VariantDocument> =
+        list?.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            com.mediquitous.productpoc.model.document.VariantDocument(
+                id = (map["id"] as? Number)?.toLong() ?: 0L,
+                code = map["code"] as? String,
+                useInventory = map["use_inventory"] as? Boolean ?: false,
+                displaySoldout = map["display_soldout"] as? Boolean ?: false,
+                inventoryType = map["inventory_type"] as? String,
+                quantityCheckType = map["quantity_check_type"] as? String,
+                quantity = (map["quantity"] as? Number)?.toInt() ?: 0,
+                safetyQuantity = (map["safety_quantity"] as? Number)?.toInt() ?: 0,
+                barcode = map["barcode"] as? String,
+                barcode2 = map["barcode2"] as? String,
+                externalBarcode = map["external_barcode"] as? String,
+                deleted = parseInstant(map["deleted"]),
+                optionIds = (map["option_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList(),
+                options = map["options"] as? Map<String, Any>,
+                additionalPrice = (map["additional_price"] as? Number)?.toDouble() ?: 0.0,
+                price = (map["price"] as? Number)?.toDouble() ?: 0.0,
+                display = parseInstant(map["display"]),
+                selling = parseInstant(map["selling"]),
+                soldOut = map["sold_out"] as? Boolean ?: false,
+                express = map["express"] as? Boolean ?: false,
+                availableStockQuantities = (map["available_stock_quantities"] as? Number)?.toInt() ?: 0,
+            )
+        } ?: emptyList()
+
+    private fun parseStockDocuments(list: List<*>?): List<com.mediquitous.productpoc.model.document.StockDocument> =
+        list?.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            com.mediquitous.productpoc.model.document.StockDocument(
+                id = (map["id"] as? Number)?.toLong() ?: 0L,
+                productVariantId = (map["product_variant_id"] as? Number)?.toLong() ?: 0L,
+                quantity = (map["quantity"] as? Number)?.toInt() ?: 0,
+                warehouseId = (map["warehouse_id"] as? Number)?.toLong(),
+                warehouseName = map["warehouse_name"] as? String,
+                retailStoreName = map["retail_store_name"] as? String,
+                isQuickDelivery = map["is_quick_delivery"] as? Boolean ?: false,
+            )
+        } ?: emptyList()
+
+    private fun parseCategoryDocuments(list: List<*>?): List<com.mediquitous.productpoc.model.document.CategoryDocument> =
+        list?.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            com.mediquitous.productpoc.model.document.CategoryDocument(
+                id = (map["id"] as? Number)?.toLong() ?: 0L,
+                parentId = (map["parent_id"] as? Number)?.toLong(),
+                name = map["name"] as? String,
+                displayName = map["display_name"] as? String,
+                slug = map["slug"] as? String,
+                isVisible = map["is_visible"] as? Boolean ?: false,
+                isLeaf = map["is_leaf"] as? Boolean ?: false,
+            )
+        } ?: emptyList()
+
+    private fun parseDisplayGroupDocuments(list: List<*>?): List<com.mediquitous.productpoc.model.document.DisplayGroupDocument> =
+        list?.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            com.mediquitous.productpoc.model.document.DisplayGroupDocument(
+                id = (map["id"] as? Number)?.toLong() ?: 0L,
+            )
+        } ?: emptyList()
 
     /**
      * Base64로 커서 인코딩

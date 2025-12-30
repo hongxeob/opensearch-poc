@@ -1,5 +1,6 @@
 package com.mediquitous.productpoc.service.search
 
+import com.mediquitous.productpoc.model.document.ProductDocument
 import com.mediquitous.productpoc.model.dto.CursorPaginationResponse
 import com.mediquitous.productpoc.model.dto.SimpleProductDto
 import com.mediquitous.productpoc.model.vo.BestRankingPath
@@ -10,6 +11,8 @@ import com.mediquitous.productpoc.repository.jpa.customer.LikeJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.ProductRankingJpaRepository
 import com.mediquitous.productpoc.repository.jpa.ranking.RankingSpecificationJpaRepository
 import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository
+import com.mediquitous.productpoc.repository.opensearch.OpenSearchRepository.SearchResult
+import com.mediquitous.productpoc.service.product.ProductConvertService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -30,6 +33,7 @@ private const val RANKING_PERIOD_MONTHLY = 30
 @Service
 class ProductSearchServiceImpl(
     private val openSearchRepository: OpenSearchRepository,
+    private val productConvertService: ProductConvertService,
     private val rankingSpecificationJpaRepository: RankingSpecificationJpaRepository,
     private val productRankingJpaRepository: ProductRankingJpaRepository,
     private val likeJpaRepository: LikeJpaRepository,
@@ -52,7 +56,7 @@ class ProductSearchServiceImpl(
 
         return CursorPaginationResponse(
             count = searchResult.totalHits,
-            results = searchResult.products,
+            results = productConvertService.convertDocumentsToSimpleProducts(searchResult.documents),
             nextCursor = null,
             previousCursor = null,
         )
@@ -310,7 +314,7 @@ class ProductSearchServiceImpl(
         val searchResult = openSearchRepository.searchByProductIdsBulk(productIdsToSearch)
 
         // 7. 원본 랭킹 순서 복원
-        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.products)
+        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.documents)
 
         return CursorPaginationResponse(
             count = searchResult.totalHits,
@@ -427,7 +431,7 @@ class ProductSearchServiceImpl(
         val searchResult = openSearchRepository.searchByProductIdsBulk(productIdsToSearch)
 
         // 6. 원본 좋아요 순서 복원 (최신 좋아요 순)
-        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.products)
+        val orderedProducts = restoreOriginalRankingOrder(productIdsToSearch, searchResult.documents)
 
         return CursorPaginationResponse(
             count = searchResult.totalHits,
@@ -458,7 +462,7 @@ class ProductSearchServiceImpl(
         val searchResult = openSearchRepository.searchByProductIdsBulk(recentlyViewedProductIds)
 
         // 3. 원본 조회 순서 복원 (최근 본 순)
-        val orderedProducts = restoreOriginalRankingOrder(recentlyViewedProductIds, searchResult.products)
+        val orderedProducts = restoreOriginalRankingOrder(recentlyViewedProductIds, searchResult.documents)
 
         return CursorPaginationResponse(
             count = orderedProducts.size.toLong(),
@@ -523,12 +527,15 @@ class ProductSearchServiceImpl(
      * 검색 결과를 페이지네이션 응답으로 변환
      */
     private fun buildPaginationResponse(
-        searchResult: OpenSearchRepository.SearchResult,
+        searchResult: SearchResult,
         size: Int,
     ): CursorPaginationResponse<SimpleProductDto> {
-        val hasNext = searchResult.products.size > size
-        val results = if (hasNext) searchResult.products.take(size) else searchResult.products
+        val hasNext = searchResult.documents.size > size
+        val documents = if (hasNext) searchResult.documents.take(size) else searchResult.documents
         val nextCursor = if (hasNext) searchResult.nextCursor else null
+
+        // ProductDocument -> SimpleProduct 변환
+        val results = productConvertService.convertDocumentsToSimpleProducts(documents)
 
         logger.debug { "검색 완료: totalHits=${searchResult.totalHits}, resultSize=${results.size}, hasNext=$hasNext" }
 
@@ -580,15 +587,18 @@ class ProductSearchServiceImpl(
      */
     private fun restoreOriginalRankingOrder(
         originalIds: List<Long>,
-        products: List<SimpleProductDto>,
+        documents: List<ProductDocument>,
     ): List<SimpleProductDto> {
-        if (products.isEmpty()) return emptyList()
+        if (documents.isEmpty()) return emptyList()
 
         val orderMap = originalIds.withIndex().associate { (index, id) -> id to index }
 
-        return products.sortedBy { product ->
-            orderMap[product.id] ?: Int.MAX_VALUE
-        }
+        val sortedDocuments =
+            documents.sortedBy { document ->
+                orderMap[document.id] ?: Int.MAX_VALUE
+            }
+
+        return productConvertService.convertDocumentsToSimpleProducts(sortedDocuments)
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.mediquitous.productpoc.repository.opensearch
 
-import com.mediquitous.productpoc.model.dto.SimpleProductDto
+import com.mediquitous.productpoc.model.document.ProductDocument
 
 /**
  * OpenSearch 리포지토리 인터페이스
@@ -138,7 +138,7 @@ interface OpenSearchRepository {
      */
     data class SearchResult(
         val totalHits: Long,
-        val products: List<SimpleProductDto>,
+        val documents: List<ProductDocument>,
         val nextCursor: String?,
     )
 }

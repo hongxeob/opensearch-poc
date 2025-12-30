@@ -138,7 +138,7 @@ class CategoryServiceImpl(
         // 트리 구조 구성
         itemsById.values.forEach { category ->
             val children = itemsByParentId[category.id] ?: emptyList()
-            category.setChildren(children)
+            category.attachChildren(children)
         }
 
         return itemsById
@@ -160,7 +160,7 @@ class CategoryServiceImpl(
         // 트리 구조 구성
         itemsById.values.forEach { category ->
             val children = itemsByParentId[category.id] ?: emptyList()
-            category.setChildren(children)
+            category.attachChildren(children)
         }
 
         return itemsById

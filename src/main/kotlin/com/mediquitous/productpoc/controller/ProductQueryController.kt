@@ -37,7 +37,7 @@ class ProductQueryController(
 //    fun getProductById(
 //        @Parameter(description = "상품 ID", required = true)
 //        @PathVariable id: Long,
-//    ): CursorPaginationResponse<SimpleProductDto> = productSearchService.getProductById(id)
+//    ): CursorPaginationResponse<SimpleProduct> = productSearchService.getProductById(id)
 
     // =====================================================
     // 여러 상품 조회

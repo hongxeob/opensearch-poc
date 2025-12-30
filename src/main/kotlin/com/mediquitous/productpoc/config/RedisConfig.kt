@@ -1,7 +1,6 @@
 package com.mediquitous.productpoc.config
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -57,7 +56,6 @@ data class RedisTimeoutProperties(
  */
 @Configuration
 @EnableConfigurationProperties(RedisProperties::class)
-@ConditionalOnProperty(prefix = "redis", name = ["enabled"], havingValue = "true", matchIfMissing = false)
 class RedisConfig(
     private val redisProperties: RedisProperties,
 ) {
