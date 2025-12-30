@@ -37,16 +37,18 @@ interface ProductCategorySetJpaRepository : JpaRepository<ProductCategorySetEnti
      * SQL: GetProductCategorySetByCategoryIDAndAfterID
      */
     @Query(
-        """
-        SELECT pcs.productId FROM ProductCategorySetEntity pcs
-        WHERE pcs.categoryId = :categoryId
-        AND pcs.productId > :afterProductId
-        ORDER BY pcs.productId
+        value = """
+        SELECT product_id FROM shopping_product_category_set
+        WHERE category_id = :categoryId
+        AND product_id > :afterProductId
+        ORDER BY product_id
+        LIMIT :limit
     """,
+        nativeQuery = true,
     )
     fun findProductIdsByCategoryId(
         @Param("categoryId") categoryId: Long,
         @Param("afterProductId") afterProductId: Long = 0,
-        @Param("count") limit: Int,
+        @Param("limit") limit: Int,
     ): List<Long>
 }
