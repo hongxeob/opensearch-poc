@@ -7,7 +7,7 @@ Go 기반의 `zelda-product` 서비스를 Spring Boot + Kotlin으로 마이그�
 | 항목 | 설명                   |
 |------|----------------------|
 | **목적** | 패션 이커머스 상품 검색 서비스    |
-| **검색 엔진** | OpenSearch 3.x       |
+| **검색 엔진** | OpenSearch 2.x       |
 | **DB** | PostgreSQL (읽기 전용)   |
 | **실시간 동기화** | Kafka CDC (Debezium) |
 | **캐싱** | Redis (버퍼링)          |
@@ -20,20 +20,29 @@ Go 기반의 `zelda-product` 서비스를 Spring Boot + Kotlin으로 마이그�
 └────────┬────────┘
          │
 ┌────────▼────────┐
-│    Service      │  비즈니스 로직
+│    Service      │  비즈니스 로직 + DTO 변환
 └────────┬────────┘
          │
     ┌────┴────┐
     │         │
 ┌───▼───┐ ┌──▼──────┐
-│  JPA  │ │OpenSearch│  데이터 액세스
+│  JPA  │ │OpenSearch│  데이터 액세스 (Document 반환)
 └───────┘ └─────────┘
 ```
 
 ### 3-Layer Architecture
 - **Controller**: HTTP 요청/응답 처리 (`@RestController`)
-- **Service**: 비즈니스 로직 - 검색, 인덱싱, 마이그레이션 (`@Service`)
-- **Repository**: 데이터 액세스 - JPA, OpenSearch (`@Repository`)
+- **Service**: 비즈니스 로직, Document → DTO 변환, 할인/혜택 적용 (`@Service`)
+- **Repository**: 데이터 액세스 - JPA Entity, OpenSearch Document 반환 (`@Repository`)
+
+### 레이어 간 데이터 흐름
+
+```
+OpenSearch ──→ ProductDocument ──→ ProductConvertService ──→ SimpleProduct/Product ──→ Controller
+              (Repository 반환)        (Service 변환)           (DTO 반환)
+```
+
+**핵심 원칙**: Repository는 Document/Entity를 반환하고, Service에서 DTO로 변환
 
 ## 🚀 기술 스택
 
@@ -66,50 +75,145 @@ src/main/kotlin/com/mediquitous/productpoc/
 │       └── GlobalExceptionHandler.kt
 │
 ├── service/                        # 비즈니스 로직
-│   ├── ProductSearchService.kt    # 상품 검색 인터페이스
-│   ├── ProductSearchServiceImpl.kt # 상품 검색 구현체
-│   ├── ProductIndexService.kt     # 상품 인덱싱 인터페이스
-│   ├── ProductIndexServiceImpl.kt # 상품 인덱싱 구현체
-│   ├── ProductMigrationService.kt # 마이그레이션 인터페이스
-│   ├── ProductMigrationServiceImpl.kt
-│   ├── SellerIndexService.kt
-│   ├── SellerIndexServiceImpl.kt
-│   ├── SellerMigrationService.kt
-│   ├── SellerMigrationServiceImpl.kt
+│   ├── search/                    # 검색 서비스
+│   │   ├── ProductSearchService.kt
+│   │   └── ProductSearchServiceImpl.kt
+│   │
+│   ├── product/                   # 상품 변환 서비스
+│   │   ├── ProductConvertService.kt      # Document → DTO 변환 인터페이스
+│   │   └── ProductConvertServiceImpl.kt  # 변환 + 할인/혜택/쿠폰 적용
+│   │
+│   ├── index/                     # 인덱싱 서비스
+│   │   ├── ProductIndexService.kt
+│   │   ├── ProductIndexServiceImpl.kt
+│   │   └── chain/                 # Chain of Responsibility 패턴
+│   │       ├── ProductDocumentBuilder.kt
+│   │       └── ...Chain.kt
+│   │
 │   └── event/                     # 이벤트 처리
-│       ├── ProductEventBuffer.kt  # 이벤트 버퍼 인터페이스
-│       ├── ProductEventBufferImpl.kt
-│       ├── handler/               # Kafka 컨슈머 핸들러
-│       ├── producer/              # Kafka 프로듀서
-│       └── topic/                 # 토픽 정의
+│       ├── ProductEventBuffer.kt
+│       └── handler/
 │
 ├── repository/
 │   ├── opensearch/                # OpenSearch 리포지토리
-│   │   ├── OpenSearchRepository.kt
-│   │   ├── OpenSearchRepositoryImpl.kt
+│   │   ├── OpenSearchRepository.kt       # SearchResult<ProductDocument> 반환
+│   │   ├── OpenSearchRepositoryImpl.kt   # Map → ProductDocument 변환
 │   │   └── query/
-│   │       └── ProductSearchQueryBuilder.kt  # 쿼리 빌더
+│   │       └── ProductSearchQueryBuilder.kt
 │   │
 │   └── jpa/                       # JPA 리포지토리
-│       ├── product/               # 상품 관련
-│       │   ├── entity/
-│       │   ├── ProductJpaRepository.kt
-│       │   ├── ProductVariantJpaRepository.kt
-│       │   ├── OptionJpaRepository.kt
-│       │   ├── StockJpaRepository.kt
-│       │   └── ...
-│       ├── seller/                # 셀러 관련
-│       ├── benefit/               # 혜택/쿠폰 관련
-│       ├── displaygroup/          # 기획전 관련
-│       ├── ranking/               # 랭킹 관련
-│       ├── customer/              # 고객 관련
-│       ├── order/                 # 주문 관련
-│       └── common/                # 공통 (카테고리, 브랜드 등)
+│       ├── product/
+│       ├── seller/
+│       ├── benefit/
+│       ├── displaygroup/
+│       ├── ranking/
+│       └── customer/
 │
 └── model/
-    └── dto/                       # 데이터 전송 객체
-        ├── ProductDto.kt
-        └── RecentlyViewedProductDto.kt
+    ├── document/                  # OpenSearch 문서 모델
+    │   ├── ProductDocument.kt     # 상품 문서
+    │   ├── SellerDocument.kt      # 셀러 문서
+    │   ├── OptionDocument.kt      # 옵션 문서
+    │   ├── VariantDocument.kt     # 품목 문서
+    │   └── ...Document.kt
+    │
+    ├── dto/                       # 클라이언트 응답 DTO
+    │   ├── Product.kt             # 상품 상세 DTO
+    │   ├── SimpleProduct.kt       # 상품 목록 DTO (Go simple_product.go)
+    │   ├── ProductOption.kt       # 옵션 DTO (Go option.go)
+    │   ├── ProductVariant.kt      # 품목 DTO (Go variant.go)
+    │   ├── Seller.kt              # 셀러 DTO
+    │   ├── Benefit.kt             # 혜택 DTO
+    │   ├── Coupon.kt              # 쿠폰 DTO
+    │   └── ProductDto.kt          # 페이지네이션 응답
+    │
+    └── vo/                        # Value Objects
+        ├── BestRankingPath.kt
+        ├── RankedProduct.kt
+        └── LikedProduct.kt
+```
+
+## 🔄 DTO 구조 (Go 서버와 동기화)
+
+### ProductOption (option.go)
+```kotlin
+data class ProductOption(
+    val id: Long,
+    val name: String,           // 옵션 종류 (Color, Size)
+    val value: String,          // 옵션 값 (black, M)
+    val hexcode: String?,       // 색상 헥사코드
+    val searchName: Any?,       // 검색용 색상명
+    val model: Boolean,         // 모델 착용 옵션 여부
+)
+```
+
+### ProductVariant (variant.go)
+```kotlin
+data class ProductVariant(
+    val id: Long,
+    val express: Boolean,                    // 빠른배송 여부
+    val availableStockQuantities: Int,       // 가용 재고
+    val price: Double,
+    val discountPrice: Double,
+    val soldOut: Boolean,
+    val optionSet: List<ProductOption>,      // 옵션 목록
+    val optionValues: String?,               // "Black / M" 형태
+    val options: Map<String, Any>?,          // 옵션 맵
+    // ... 기타 필드
+)
+```
+
+### SimpleProduct (simple_product.go)
+```kotlin
+data class SimpleProduct(
+    val id: Long,
+    val code: String?,
+    val name: String?,
+    val price: Double,
+    val discountPrice: Double,
+    val discountRate: Double,
+    val image: Attachment?,
+    val optionSet: List<ProductOption>,
+    val leafCategories: List<CategoryDto>,
+    val seller: String,
+    val sellerSlug: String?,
+    val benefitEnd: OffsetDateTime?,         // 혜택 종료 시간
+    val shippingFeeBenefit: Benefit?,        // 배송비 혜택
+    val express: Boolean,
+    val iconSet: List<String>,
+    val reviewCount: Int,
+    val reviewAverage: Double,
+    val totalLikeCount: Int,
+    // ... 기타 필드
+)
+```
+
+## 🔍 ProductConvertService - 변환 서비스
+
+### 역할
+- **Document → DTO 변환**: OpenSearch Document를 클라이언트 응답용 DTO로 변환
+- **비즈니스 로직 적용**: 할인, 혜택, 쿠폰 계산
+
+### 주요 메서드
+
+| 메서드 | 설명 |
+|--------|------|
+| `convertToProductDto(builders)` | ProductDocumentBuilder → Product (상세) |
+| `convertToSimpleProductDto(builders)` | ProductDocumentBuilder → SimpleProduct (목록) |
+| `convertDocumentsToSimpleProducts(documents)` | ProductDocument → SimpleProduct (검색 결과) |
+
+### 변환 파이프라인
+```
+ProductDocument
+    ↓
+ProductDocumentBuilder (documentToBuilder)
+    ↓
+Product (builderToProduct)
+    ↓ applyDisplayGroup()  - 활성 기획전 필터링
+    ↓ applyBenefit()       - 혜택 적용 (고정/비율 할인)
+    ↓ applyCoupon()        - 쿠폰 적용
+    ↓
+SimpleProduct (toSimple)
 ```
 
 ## 🔍 상품 검색 서비스
@@ -131,9 +235,19 @@ src/main/kotlin/com/mediquitous/productpoc/
 | `getRecommendProducts()` | 추천 상품         | `recommend_by_codes_service.go` |
 | `getProductsByCategoryId()` | 카테고리 ID별      | `by_category_id_service.go` |
 | `getProductsByRetailStore()` | 리테일 스토어별      | `by_retail_store_name_service.go` |
-| `getProductsByBestRanking()` | 베스트 랭킹        | `by_best_ranking_service.go` (DB 연동 필요) |
-| `getLikedProducts()` | 좋아요 상품        | `by_customer_id_liked_service.go` (DB 연동 필요) |
-| `getRecentlyViewedProducts()` | 최근 본 상품       | `by_customer_id_recently_viewed_service.go` (DB 연동 필요) |
+| `getProductsByBestRanking()` | 베스트 랭킹        | `by_best_ranking_service.go` |
+| `getLikedProducts()` | 좋아요 상품        | `by_customer_id_liked_service.go` |
+| `getRecentlyViewedProducts()` | 최근 본 상품       | `by_customer_id_recently_viewed_service.go` |
+
+### OpenSearchRepository - 검색 결과
+
+```kotlin
+data class SearchResult(
+    val totalHits: Long,
+    val documents: List<ProductDocument>,  // Document 반환 (DTO 아님)
+    val nextCursor: String?,
+)
+```
 
 ### ProductSearchQueryBuilder - 쿼리 빌더
 
@@ -215,7 +329,12 @@ SPRING_DATA_REDIS_PORT=6379
 
 ### 1. 검색 쿼리
 ```
-HTTP Request → Controller → ProductSearchService → OpenSearchRepository → OpenSearch
+HTTP Request 
+    → Controller 
+    → ProductSearchService 
+    → OpenSearchRepository (ProductDocument 반환)
+    → ProductConvertService (SimpleProduct 변환)
+    → Controller (JSON 응답)
 ```
 
 ### 2. 데이터 동기화 (CDC)
@@ -259,17 +378,33 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 | `sqlc` | Spring Data JPA `@Entity` + `@Repository` |
 | `error` 반환 | Exception throw + `@ControllerAdvice` |
 | `zap.Logger` | `KotlinLogging.logger` |
+| `dto.Option` | `ProductOption` |
+| `dto.Variant` | `ProductVariant` |
+| `dto.SimpleProduct` | `SimpleProduct` |
+| `dao.Product` (Document) | `ProductDocument` |
+
+### DTO 필드 매핑 규칙
+
+| Go 필드 | Kotlin 필드 | 비고 |
+|---------|-------------|------|
+| `snake_case` JSON | `@JsonProperty("snake_case")` | Jackson 어노테이션 |
+| `*string` (nullable) | `String?` | Kotlin nullable |
+| `interface{}` | `Any?` | 동적 타입 |
+| `[]Option` | `List<ProductOption>` | 불변 리스트 |
+| `map[string]any` | `Map<String, Any>?` | nullable 맵 |
 
 ## 📋 TODO
 
 - [x] ProductSearchService 구현
 - [x] ProductSearchQueryBuilder 구현
-- [x] OpenSearchRepository 구현
+- [x] OpenSearchRepository 구현 (Document 반환)
+- [x] ProductConvertService 구현 (Document → DTO 변환)
 - [x] JPA 엔티티 및 리포지토리 구현
 - [x] Kafka 이벤트 버퍼 구현
-- [ ] CDC 이벤트 구현
-- [x] 베스트 랭킹 DB 연동 (PostgreSQL 랭킹 스펙 조회)
+- [x] DTO Go 서버와 동기화 (ProductOption, ProductVariant, SimpleProduct)
+- [x] 베스트 랭킹 DB 연동
 - [x] 좋아요/최근 본 상품 DB 연동
+- [x] CDC 이벤트 구현
 - [ ] 테스트 코드 작성 (Kotest)
 - [ ] Docker Compose 설정
 - [ ] CI/CD 파이프라인 구축
@@ -280,10 +415,6 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 - [OpenSearch Java Client](https://opensearch.org/docs/latest/clients/java/)
 - [Spring Kafka 문서](https://spring.io/projects/spring-kafka)
 - [Kotest 문서](https://kotest.io/)
-
-## 👥 기여자
-
-- 홍섭 (Backend Developer)
 
 ## 📝 라이센스
 
